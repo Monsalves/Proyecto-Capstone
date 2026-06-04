@@ -43,8 +43,11 @@ jobs:
           key: ${{ secrets.AZURE_VM_KEY }}
           port: ${{ secrets.AZURE_VM_PORT || 22 }}
           script: |
-            # Navigate to the project directory on the VM
-            cd ~/PROYECTO_JAC
+            # Clone the repository if it doesn't exist, otherwise navigate to it
+            if [ ! -d "$HOME/PROYECTO_JAC" ]; then
+              git clone https://github.com/Monsalves/Proyecto-Capstone.git "$HOME/PROYECTO_JAC"
+            fi
+            cd "$HOME/PROYECTO_JAC"
             
             # Reset local changes and pull the latest code from main
             git fetch --all
