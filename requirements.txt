@@ -7,3 +7,4 @@ scikit-learn==1.9.0
 joblib==1.5.3
 python-multipart==0.0.30
 pytest==9.0.3
+httpx==0.28.1
