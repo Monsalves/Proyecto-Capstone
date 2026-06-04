@@ -1,0 +1,50 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Testing cache
+.pytest_cache/
+
+# Databases (Local State)
+db.sqlite3
+*.db
+*.sqlite3
+
+# Trained ML Models
+*.joblib
+*.pkl
+
+# IDE / Editor configurations
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Project specifications and notes
+specs/
+SimJAC_V2_Especificacion.md
+especificacion_sandbox_buses_jac.md
+Aprendizaje.md
+
+# Scratch build scripts and generated static outputs
+build_static_html.py
+generate_static_json.py
+frontend/static_data.json
+index.html
+
+

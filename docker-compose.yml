@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  jac-revenue-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jac_revenue_sandbox
+    ports:
+      - "8001:8001"
+    environment:
+      - DATA_DIR=/app/data
+      - TZ=America/Santiago
+    volumes:
+      - jac_data:/app/data
+    restart: unless-stopped
+
+volumes:
+  jac_data:
+    driver: local
