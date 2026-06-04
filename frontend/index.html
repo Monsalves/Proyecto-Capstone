@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JAC Revenue Sandbox</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/plotly.js-dist-min@2.24.1/plotly.min.js"></script>
+    <style>
+        body {
+            font-family: 'Outfit', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+            min-height: 100vh;
+            background-image: radial-gradient(circle at 10% 20%, rgba(220, 38, 38, 0.03) 0%, transparent 60%),
+                              radial-gradient(circle at 90% 80%, rgba(248, 113, 113, 0.05) 0%, transparent 60%);
+        }
+        .glass-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+            transition: all 0.3s ease;
+            color: #1e293b;
+        }
+        .glass-card:hover {
+            border-color: rgba(220, 38, 38, 0.20);
+            box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.05);
+        }
+        .header-brand {
+            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 700;
+        }
+        .btn-gradient {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            border: none;
+            color: white;
+            font-weight: 500;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .btn-gradient:hover {
+            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+            color: white;
+        }
+        .custom-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 5px;
+            background: #e2e8f0;
+            outline: none;
+        }
+        .custom-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: #dc2626;
+            cursor: pointer;
+            border: 2px solid #ffffff;
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
+            transition: transform 0.1s;
+        }
+        .custom-slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+        }
+        .text-accent {
+            color: #dc2626;
+        }
+        .variation-badge {
+            font-size: 0.85rem;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+        .badge-up {
+            background: rgba(22, 163, 74, 0.12);
+            color: #15803d;
+        }
+        .badge-down {
+            background: rgba(220, 38, 38, 0.12);
+            color: #b91c1c;
+        }
+        .drag-drop-area {
+            border: 2px dashed rgba(220, 38, 38, 0.25);
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            background: rgba(254, 242, 242, 0.5);
+            cursor: pointer;
+            transition: all 0.2s ease;
+            color: #1e293b;
+        }
+        .drag-drop-area:hover {
+            border-color: #dc2626;
+            background: #fee2e2;
+        }
+        .progress-donut {
+            position: relative;
+            width: 80px;
+            height: 80px;
+        }
+        .progress-donut svg {
+            transform: rotate(-90deg);
+        }
+        .progress-donut .bg-circle {
+            fill: none;
+            stroke: #f1f5f9;
+            stroke-width: 8;
+        }
+        .progress-donut .val-circle {
+            fill: none;
+            stroke-width: 8;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 0.5s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function App() {
+            const [state, setState] = useState({
+                modelo_activo: false,
+                fecha_entrenamiento: null,
+                registros_procesados: 0,
+                registros_descartados: 0,
+                mae: 0,
+                rmse: 0,
+                r2: 0,
+                capacidad_bus: 45,
+                nombre_empresa: "Buses JAC",
+                fecha_min_dataset: null,
+                fecha_max_dataset: null,
+                rutas_disponibles: 0
+            });
+            
+            const [loading, setLoading] = useState(false);
+            const [uploadProgress, setUploadProgress] = useState(null);
+            const [activeTab, setActiveTab] = useState("dashboard");
+            
+            const [rutas, setRutas] = useState([]);
+            const [horas, setHoras] = useState([]);
+            
+            const [selectedRuta, setSelectedRuta] = useState("");
+            const [selectedTemporada, setSelectedTemporada] = useState("media");
+            const [selectedTipoDia, setSelectedTipoDia] = useState("semana");
+            const [selectedHora, setSelectedHora] = useState("");
+            
+            const getMappedFecha = (temp, tipo) => {
+                if (temp === "verano") {
+                    return tipo === "semana" ? "2023-01-18" : "2023-01-21";
+                } else if (temp === "invierno") {
+                    return tipo === "semana" ? "2023-07-19" : "2023-07-22";
+                } else {
+                    return tipo === "semana" ? "2023-10-18" : "2023-10-21";
+                }
+            };
+            
+            const selectedFecha = getMappedFecha(selectedTemporada, selectedTipoDia);
+            
+            const [tarifa, setTarifa] = useState(0);
+            const [cupos, setCupos] = useState(0);
+            
+            const [escenarioBase, setEscenarioBase] = useState(null);
+            const [projection, setProjection] = useState(null);
+            const [errorMsg, setErrorMsg] = useState("");
+
+            const fetchState = async () => {
+                try {
+                    const res = await fetch("/api/sistema/estado");
+                    const data = await res.json();
+                    setState(data);
+                    if (data.modelo_activo) {
+                        fetchRutas();
+                    }
+                } catch (err) {
+                    console.error("Error al obtener estado:", err);
+                }
+            };
+
+            const fetchRutas = async () => {
+                try {
+                    const res = await fetch("/api/rutas");
+                    const data = await res.json();
+                    setRutas(data);
+                    if (data.length > 0) {
+                        setSelectedRuta(data[0].codigo);
+                    }
+                } catch (err) {
+                    console.error("Error al obtener rutas:", err);
+                }
+            };
+
+            useEffect(() => {
+                fetchState();
+            }, []);
+
+            useEffect(() => {
+                if (!selectedRuta) return;
+                const dateStr = selectedFecha || "2023-10-15";
+                
+                const fetchHours = async () => {
+                    try {
+                        const res = await fetch(`/api/rutas/${selectedRuta}/horas?fecha=${dateStr}`);
+                        const data = await res.json();
+                        setHoras(data);
+                        if (data.length > 0) {
+                            setSelectedHora(data[0]);
+                        } else {
+                            setSelectedHora("");
+                        }
+                    } catch (err) {
+                        console.error("Error al obtener horas:", err);
+                    }
+                };
+                fetchHours();
+            }, [selectedRuta, selectedFecha]);
+
+            useEffect(() => {
+                if (!selectedRuta || !selectedHora) return;
+                const dateStr = selectedFecha || "2023-10-15";
+                
+                const loadBase = async () => {
+                    try {
+                        const res = await fetch(`/api/escenario/base?ruta=${selectedRuta}&fecha=${dateStr}&hora=${selectedHora}`);
+                        const data = await res.json();
+                        setEscenarioBase(data);
+                        setTarifa(data.tarifa_base);
+                        setCupos(data.cupos_proteccion_sugeridos);
+                    } catch (err) {
+                        console.error("Error al cargar escenario base:", err);
+                    }
+                };
+                loadBase();
+            }, [selectedRuta, selectedFecha, selectedHora]);
+
+            useEffect(() => {
+                if (!selectedRuta || !selectedHora || tarifa === 0) return;
+                const dateStr = selectedFecha || "2023-10-15";
+                
+                const getProjection = async () => {
+                    try {
+                        const res = await fetch("/api/simulacion/proyectar", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                                ruta: selectedRuta,
+                                fecha: dateStr,
+                                hora: selectedHora,
+                                tarifa: parseFloat(tarifa),
+                                cupos_proteccion: parseInt(cupos)
+                            })
+                        });
+                        if (!res.ok) {
+                            const err = await res.json();
+                            setErrorMsg(err.detail || "Error en proyección");
+                            return;
+                        }
+                        const data = await res.json();
+                        setProjection(data);
+                        setErrorMsg("");
+                    } catch (err) {
+                        console.error("Error en simulación:", err);
+                    }
+                };
+                
+                const timer = setTimeout(getProjection, 50);
+                return () => clearTimeout(timer);
+            }, [selectedRuta, selectedFecha, selectedHora, tarifa, cupos]);
+
+            useEffect(() => {
+                if (!projection) return;
+                
+                const traceBase = {
+                    x: ["Ingreso Proyectado ($)"],
+                    y: [projection.escenario_base.ingreso_proyectado],
+                    name: "Histórico Base",
+                    type: "bar",
+                    marker: { color: "#94a3b8" },
+                    text: ["$" + projection.escenario_base.ingreso_proyectado.toLocaleString("es-CL")],
+                    textposition: "outside",
+                    textfont: { color: "#1e293b", size: 13, family: "Outfit, sans-serif" }
+                };
+
+                const traceActual = {
+                    x: ["Ingreso Proyectado ($)"],
+                    y: [projection.escenario_actual.ingreso_proyectado],
+                    name: "Escenario Optimizado RM",
+                    type: "bar",
+                    marker: { color: "#dc2626" },
+                    text: ["$" + projection.escenario_actual.ingreso_proyectado.toLocaleString("es-CL")],
+                    textposition: "outside",
+                    textfont: { color: "#1e293b", size: 13, family: "Outfit, sans-serif" }
+                };
+
+                const layoutComparison = {
+                    title: {
+                        text: "Comparativa de Ingresos: Base vs Optimizado RM",
+                        font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                    },
+                    barmode: "group",
+                    paper_bgcolor: "rgba(0,0,0,0)",
+                    plot_bgcolor: "rgba(0,0,0,0)",
+                    font: { color: "#1e293b", family: "Outfit, sans-serif" },
+                    margin: { t: 40, b: 40, l: 60, r: 20 },
+                    height: 250,
+                    yaxis: { gridcolor: "#e2e8f0", title: "$ CLP" },
+                    showlegend: true,
+                    legend: { orientation: "h", y: 1.15 }
+                };
+
+                Plotly.newPlot("comparison-chart", [traceBase, traceActual], layoutComparison, { responsive: true, displayModeBar: false });
+                
+                const lineBase = {
+                    x: projection.booking_curve.historica.map(h => h.dias_anticipacion),
+                    y: projection.booking_curve.historica.map(h => h.asientos_acumulados),
+                    name: "Histórico Promedio",
+                    type: "scatter",
+                    mode: "lines",
+                    line: { color: "#94a3b8", width: 3 },
+                    fill: "tozeroy",
+                    fillcolor: "rgba(148, 163, 184, 0.06)"
+                };
+                
+                const lineActual = {
+                    x: projection.booking_curve.proyectada.map(p => p.dias_anticipacion),
+                    y: projection.booking_curve.proyectada.map(p => p.asientos_acumulados),
+                    name: "Proyección Escenario",
+                    type: "scatter",
+                    mode: "lines",
+                    line: { color: "#dc2626", width: 3, dash: "dash" },
+                    fill: "tozeroy",
+                    fillcolor: "rgba(220, 38, 38, 0.06)"
+                };
+                
+                const capacityLine = {
+                    x: [-30, 0],
+                    y: [state.capacidad_bus, state.capacidad_bus],
+                    name: `Capacidad (${state.capacidad_bus} asientos)`,
+                    type: "scatter",
+                    mode: "lines",
+                    line: { color: "#0f172a", width: 2, dash: "dot" }
+                };
+                
+                const layoutCurve = {
+                    title: {
+                        text: "Booking Curve (Ritmo de Venta)",
+                        font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                    },
+                    paper_bgcolor: "rgba(0,0,0,0)",
+                    plot_bgcolor: "rgba(0,0,0,0)",
+                    font: { color: "#1e293b", family: "Outfit, sans-serif" },
+                    margin: { t: 40, b: 40, l: 40, r: 20 },
+                    height: 250,
+                    xaxis: { title: "Días de Anticipación", gridcolor: "#e2e8f0" },
+                    yaxis: { title: "Asientos Vendidos", gridcolor: "#e2e8f0" }
+                };
+                
+                Plotly.newPlot("curve-chart", [lineBase, lineActual, capacityLine], layoutCurve, { responsive: true, displayModeBar: false });
+                
+                const variables = projection.tornado.map(t => t.variable);
+                const upImpacts = projection.tornado.map(t => t.impacto_subida_10);
+                const downImpacts = projection.tornado.map(t => t.impacto_bajada_10);
+                
+                const traceTornadoUp = {
+                    y: variables,
+                    x: upImpacts,
+                    name: "Subida +10%",
+                    type: "bar",
+                    orientation: "h",
+                    marker: { color: "#16a34a" }
+                };
+                
+                const traceTornadoDown = {
+                    y: variables,
+                    x: downImpacts,
+                    name: "Bajada -10%",
+                    type: "bar",
+                    orientation: "h",
+                    marker: { color: "#dc2626" }
+                };
+                
+                const layoutTornado = {
+                    title: {
+                        text: "Análisis de Sensibilidad de Ingresos (Tornado)",
+                        font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                    },
+                    barmode: "relative",
+                    paper_bgcolor: "rgba(0,0,0,0)",
+                    plot_bgcolor: "rgba(0,0,0,0)",
+                    font: { color: "#1e293b", family: "Outfit, sans-serif" },
+                    margin: { t: 40, b: 40, l: 120, r: 20 },
+                    height: 200,
+                    xaxis: { title: "Variación del Ingreso (CLP)", gridcolor: "#e2e8f0" }
+                };
+                
+                Plotly.newPlot("tornado-chart", [traceTornadoUp, traceTornadoDown], layoutTornado, { responsive: true, displayModeBar: false });
+                
+                if (projection.sensibilidad_cruzada) {
+                    const tracesCruzada = projection.sensibilidad_cruzada.map((item, idx) => {
+                        const classmateColors = ["#4db6ac", "#e28743", "#5c6bc0", "#ec4899"];
+                        const color = classmateColors[idx % classmateColors.length];
+                        return {
+                            x: item.puntos.map(p => p.cupos),
+                            y: item.puntos.map(p => p.ingreso),
+                            name: item.etiqueta,
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            line: { color: color, width: 2 },
+                            marker: { color: color, size: 6 }
+                        };
+                    });
+                    
+                    const layoutCruzada = {
+                        title: {
+                            text: "Sensibilidad PRECIO vs CUPOS PROTEGIDOS",
+                            font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                        },
+                        paper_bgcolor: "rgba(0,0,0,0)",
+                        plot_bgcolor: "rgba(0,0,0,0)",
+                        font: { color: "#1e293b", family: "Outfit, sans-serif" },
+                        xaxis: { 
+                            title: "Cupos Protegidos (última hora)", 
+                            gridcolor: "#e2e8f0", 
+                            tickvals: [5, 10, 15, 20] 
+                        },
+                        yaxis: { 
+                            title: "Ingreso Total (CLP)", 
+                            gridcolor: "#e2e8f0" 
+                        },
+                        margin: { t: 40, b: 40, l: 80, r: 20 },
+                        height: 200,
+                        legend: { orientation: 'h', y: -0.3, font: { size: 10 } }
+                    };
+                    
+                    Plotly.newPlot("sensibilidad-cruzada-chart", tracesCruzada, layoutCruzada, { responsive: true, displayModeBar: false });
+                }
+                
+            }, [projection]);
+
+            const handleFileUpload = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                setLoading(true);
+                setUploadProgress("Cargando CSV y entrenando modelo...");
+                const formData = new FormData();
+                formData.append("archivo", file);
+                
+                try {
+                    const res = await fetch("/api/sistema/cargar-csv", {
+                        method: "POST",
+                        body: formData
+                    });
+                    if (!res.ok) {
+                        const err = await res.json();
+                        alert("Error: " + err.detail);
+                        setLoading(false);
+                        setUploadProgress(null);
+                        return;
+                    }
+                    await fetchState();
+                    setLoading(false);
+                    setUploadProgress(null);
+                    alert("¡Modelo entrenado exitosamente con los datos del CSV!");
+                } catch (err) {
+                    console.error(err);
+                    alert("Error al cargar y procesar.");
+                    setLoading(false);
+                    setUploadProgress(null);
+                }
+            };
+
+            const handleConfigSubmit = async (e) => {
+                e.preventDefault();
+                const cap = parseInt(e.target.capacidad.value);
+                const name = e.target.empresa.value;
+                
+                try {
+                    const res = await fetch("/api/sistema/configuracion", {
+                        method: "PUT",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ capacidad_bus: cap, nombre_empresa: name })
+                    });
+                    if (res.ok) {
+                        alert("Configuración actualizada.");
+                        fetchState();
+                    }
+                } catch (err) {
+                    alert("Error al guardar configuración.");
+                }
+            };
+
+            const handleReset = () => {
+                if (escenarioBase) {
+                    setTarifa(escenarioBase.tarifa_base);
+                    setCupos(escenarioBase.cupos_proteccion_sugeridos);
+                }
+            };
+
+            const formatCLP = (val) => {
+                return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(val);
+            };
+
+            return (
+                <div className="container-fluid py-4">
+                    <header className="d-flex justify-content-between align-items-center mb-4 glass-card p-3">
+                        <div className="d-flex align-items-center">
+                            <span className="fs-3 me-2">🚌</span>
+                            <h1 className="h4 m-0 header-brand">{state.nombre_empresa} — Revenue Sandbox</h1>
+                        </div>
+                        <div className="d-flex gap-2">
+                            <button className={`btn btn-sm ${activeTab === "dashboard" ? "btn-danger text-white" : "btn-outline-secondary"}`} onClick={() => setActiveTab("dashboard")}>
+                                <i className="bi bi-speedometer2"></i> Dashboard Sandbox
+                            </button>
+                            <button className={`btn btn-sm ${activeTab === "config" ? "btn-danger text-white" : "btn-outline-secondary"}`} onClick={() => setActiveTab("config")}>
+                                <i className="bi bi-gear"></i> Configuración
+                            </button>
+                        </div>
+                    </header>
+
+                    {!state.modelo_activo ? (
+                        <div className="row justify-content-center my-5">
+                            <div className="col-md-6">
+                                <div className="glass-card p-5 text-center">
+                                    <span className="fs-1 text-accent d-block mb-3">📊</span>
+                                    <h3 className="mb-3 text-dark fw-bold">JAC Revenue Sandbox</h3>
+                                    <p className="text-secondary mb-4">
+                                        Bienvenido al Simulador de Escenarios Comerciales. Para comenzar, debe cargar el archivo de datos históricos de ventas y entrenar el motor predictivo.
+                                    </p>
+                                    <label className="drag-drop-area w-100 d-block">
+                                        <i className="bi bi-cloud-arrow-up fs-2 text-accent"></i>
+                                        <span className="d-block mt-2 fw-semibold">Seleccionar archivo CSV</span>
+                                        <span className="text-muted small">Cargue OCTUBRE23_ANON.csv para entrenar</span>
+                                        <input type="file" className="d-none" accept=".csv" onChange={handleFileUpload} />
+                                    </label>
+                                    {loading && (
+                                        <div className="mt-3">
+                                            <div className="spinner-border text-danger spinner-border-sm me-2"></div>
+                                            <span className="small text-secondary">{uploadProgress}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            {activeTab === "config" ? (
+                                <div className="row justify-content-center">
+                                    <div className="col-md-8">
+                                        <div className="glass-card p-4 mb-4">
+                                            <h4 className="mb-4 text-accent fw-bold"><i className="bi bi-gear"></i> Configuración del Sistema</h4>
+                                            <form onSubmit={handleConfigSubmit} className="row g-3">
+                                                <div className="col-md-6">
+                                                    <label className="form-label text-secondary small">Capacidad Total de Bus (Asientos)</label>
+                                                    <input type="number" name="capacidad" className="form-control bg-white text-dark border-secondary-subtle" defaultValue={state.capacidad_bus} required min="1" max="100" />
+                                                </div>
+                                                <div className="col-md-6">
+                                                    <label className="form-label text-secondary small">Nombre de la Empresa</label>
+                                                    <input type="text" name="empresa" className="form-control bg-white text-dark border-secondary-subtle" defaultValue={state.nombre_empresa} required />
+                                                </div>
+                                                <div className="col-12 mt-4">
+                                                    <button type="submit" className="btn btn-gradient px-4">Guardar Configuración</button>
+                                                </div>
+                                            </form>
+                                        </div>
+
+                                        <div className="glass-card p-4">
+                                            <h4 className="mb-4 text-accent fw-bold"><i className="bi bi-info-circle"></i> Estado del Modelo Activo</h4>
+                                            <div className="row g-3">
+                                                <div className="col-md-6">
+                                                    <p className="mb-1 text-secondary small">Fecha de Último Entrenamiento</p>
+                                                    <p className="fw-semibold text-dark">{new Date(state.fecha_entrenamiento).toLocaleString()}</p>
+                                                </div>
+                                                <div className="col-md-6">
+                                                    <p className="mb-1 text-secondary small">Registros Procesados del CSV</p>
+                                                    <p className="fw-semibold text-dark">{state.registros_procesados} boletos</p>
+                                                </div>
+                                                <div className="col-md-4">
+                                                    <p className="mb-1 text-secondary small">MAE (Error Medio Absoluto)</p>
+                                                    <p className="fw-semibold text-dark">{state.mae ? state.mae.toFixed(3) : "-"} asientos</p>
+                                                </div>
+                                                <div className="col-md-4">
+                                                    <p className="mb-1 text-secondary small">RMSE (Raíz de Error Cuadrático Medio)</p>
+                                                    <p className="fw-semibold text-dark">{state.rmse ? state.rmse.toFixed(3) : "-"} asientos</p>
+                                                </div>
+                                                <div className="col-md-4">
+                                                    <p className="mb-1 text-secondary small">R² (Coeficiente Determinación)</p>
+                                                    <p className="fw-semibold text-dark">{state.r2 ? state.r2.toFixed(3) : "-"}</p>
+                                                </div>
+                                                <div className="col-12">
+                                                    <hr className="border-secondary-subtle" />
+                                                </div>
+                                                <div className="col-md-6">
+                                                    <p className="mb-1 text-secondary small">Rango Temporal de Ventas</p>
+                                                    <p className="fw-semibold text-dark">{state.fecha_min_dataset} hasta {state.fecha_max_dataset}</p>
+                                                </div>
+                                                <div className="col-md-6">
+                                                    <p className="mb-1 text-secondary small">Rutas Únicas</p>
+                                                    <p className="fw-semibold text-dark">{state.rutas_disponibles} rutas</p>
+                                                </div>
+                                                <div className="col-12 mt-3">
+                                                    <label className="drag-drop-area w-100 d-block">
+                                                        <i className="bi bi-cloud-arrow-up fs-3 text-accent"></i>
+                                                        <span className="d-block mt-2 small fw-semibold">Entrenar nuevamente con un nuevo CSV</span>
+                                                        <input type="file" className="d-none" accept=".csv" onChange={handleFileUpload} />
+                                                    </label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="row g-4">
+                                    <div className="col-lg-4">
+                                        <div className="glass-card p-4 mb-4">
+                                            <h4 className="mb-3 text-accent fw-bold"><i className="bi bi-sliders"></i> Definir Escenario</h4>
+                                            
+                                            <div className="mb-3">
+                                                <label className="form-label text-secondary small">Seleccionar Ruta</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedRuta} onChange={e => setSelectedRuta(e.target.value)}>
+                                                    {rutas.map(r => (
+                                                        <option key={r.codigo} value={r.codigo}>{r.etiqueta}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-secondary small">Temporada</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedTemporada} onChange={e => setSelectedTemporada(e.target.value)}>
+                                                    <option value="media">Temporada Media (Octubre/Normal)</option>
+                                                    <option value="verano">Verano / Temporada Alta (Enero)</option>
+                                                    <option value="invierno">Vacaciones de Invierno (Julio)</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-secondary small">Tipo de Día</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedTipoDia} onChange={e => setSelectedTipoDia(e.target.value)}>
+                                                    <option value="semana">Días de Semana (Lunes a Jueves)</option>
+                                                    <option value="finde">Fin de Semana (Viernes a Domingo)</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="mb-3">
+                                                <label className="form-label text-secondary small">Hora del Servicio</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedHora} onChange={e => setSelectedHora(e.target.value)}>
+                                                    {horas.map(h => (
+                                                        <option key={h} value={h}>{h}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="glass-card p-4">
+                                            <h4 className="mb-4 text-accent fw-bold"><i className="bi bi-sliders"></i> Controles del Sandbox</h4>
+                                            
+                                            {escenarioBase ? (
+                                                <div>
+                                                    <div className="mb-4">
+                                                        <div className="d-flex justify-content-between mb-2">
+                                                            <label className="form-label text-secondary small m-0 fw-semibold">Tarifa Aplicada</label>
+                                                            <span className="fw-bold text-dark">{formatCLP(tarifa)}</span>
+                                                        </div>
+                                                        <input type="range" className="custom-slider" min={Math.round(escenarioBase.tarifa_base * 0.5)} max={Math.round(escenarioBase.tarifa_base * 2.0)} step="100" value={tarifa} onChange={e => setTarifa(e.target.value)} />
+                                                        <div className="d-flex justify-content-between text-muted small mt-1">
+                                                            <span>50%: {formatCLP(escenarioBase.tarifa_base * 0.5)}</span>
+                                                            <span className="text-accent fw-medium">Base: {formatCLP(escenarioBase.tarifa_base)}</span>
+                                                            <span>200%: {formatCLP(escenarioBase.tarifa_base * 2)}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mb-4">
+                                                        <div className="d-flex justify-content-between mb-2">
+                                                            <label className="form-label text-secondary small m-0 fw-semibold">Cupos de Protección</label>
+                                                            <span className="fw-bold text-dark">{cupos} asientos ({Math.round(cupos / state.capacidad_bus * 100)}%)</span>
+                                                        </div>
+                                                        <input type="range" className="custom-slider" min="0" max={state.capacidad_bus} step="1" value={cupos} onChange={e => setCupos(e.target.value)} />
+                                                        <div className="d-flex justify-content-between text-muted small mt-1">
+                                                            <span>0 cupos</span>
+                                                            <span className="text-accent fw-medium">Base: {escenarioBase.cupos_proteccion_sugeridos}</span>
+                                                            <span>Max: {state.capacidad_bus}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <button className="btn btn-outline-danger btn-sm w-100 fw-semibold" onClick={handleReset}>
+                                                        <i className="bi bi-arrow-counterclockwise"></i> Restablecer escenario base
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <p className="text-center text-muted py-3">Seleccione un escenario completo arriba</p>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="col-lg-8">
+                                        {errorMsg && (
+                                            <div className="alert alert-danger border-danger bg-danger-subtle text-danger mb-4">
+                                                <i className="bi bi-exclamation-triangle-fill me-2"></i> {errorMsg}
+                                            </div>
+                                        )}
+
+                                        {projection ? (
+                                            <div>
+                                                <div className="row g-4 mb-4">
+                                                    <div className="col-md-6">
+                                                        <div className="glass-card p-4 d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                <span className="text-secondary small d-block mb-1">Ingreso Total Proyectado</span>
+                                                                <h2 className="fw-bold m-0 text-dark">{formatCLP(projection.escenario_actual.ingreso_proyectado)}</h2>
+                                                                <div className="mt-2">
+                                                                    <span className={`variation-badge ${projection.escenario_actual.variacion_ingreso_porcentaje >= 0 ? "badge-up" : "badge-down"}`}>
+                                                                        {projection.escenario_actual.variacion_ingreso_porcentaje >= 0 ? "▲ +" : "▼ "}
+                                                                        {projection.escenario_actual.variacion_ingreso_porcentaje}%
+                                                                    </span>
+                                                                    <span className="text-muted small ms-2">vs. Base</span>
+                                                                </div>
+                                                            </div>
+                                                            <span className="fs-1 text-accent">💰</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="col-md-6">
+                                                        <div className="glass-card p-4 d-flex justify-content-between align-items-center">
+                                                            <div>
+                                                                <span className="text-secondary small d-block mb-1">Ocupación Proyectada</span>
+                                                                <h2 className="fw-bold m-0 text-dark">{projection.escenario_actual.ocupacion_porcentaje.toFixed(1)}%</h2>
+                                                                <div className="mt-2">
+                                                                    <span className={`variation-badge ${projection.escenario_actual.variacion_ocupacion_puntos >= 0 ? "badge-up" : "badge-down"}`}>
+                                                                        {projection.escenario_actual.variacion_ocupacion_puntos >= 0 ? "▲ +" : "▼ "}
+                                                                        {projection.escenario_actual.variacion_ocupacion_puntos} pp
+                                                                    </span>
+                                                                    <span className="text-muted small ms-2">vs. Base</span>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            <div className="progress-donut">
+                                                                <svg width="80" height="80">
+                                                                    <circle className="bg-circle" cx="40" cy="40" r="32" />
+                                                                    <circle 
+                                                                        className="val-circle" 
+                                                                        cx="40" cy="40" r="32" 
+                                                                        stroke={projection.escenario_actual.ocupacion_porcentaje >= 80 ? "#16a34a" : (projection.escenario_actual.ocupacion_porcentaje >= 50 ? "#d97706" : "#dc2626")}
+                                                                        strokeDasharray="201"
+                                                                        strokeDashoffset={201 - (201 * projection.escenario_actual.ocupacion_porcentaje / 100)}
+                                                                    />
+                                                                </svg>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="row g-4 mb-4">
+                                                    <div className="col-md-12">
+                                                        <div className="glass-card p-4">
+                                                            <div id="comparison-chart"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-md-12">
+                                                        <div className="glass-card p-4">
+                                                            <div id="curve-chart"></div>
+                                                            <div className="text-center text-muted small mt-2">
+                                                                <i className="bi bi-info-circle"></i> Las proyecciones son estimaciones estadísticas y no garantizan resultados operativos exactos.
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-md-6">
+                                                        <div className="glass-card p-4">
+                                                            <div id="tornado-chart"></div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-md-6">
+                                                        <div className="glass-card p-4">
+                                                            <div id="sensibilidad-cruzada-chart"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="glass-card p-5 text-center text-secondary">
+                                                <div className="spinner-border text-danger mb-3"></div>
+                                                <p>Calculando proyecciones y simulando el escenario comercial...</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

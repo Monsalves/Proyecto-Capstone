@@ -45,6 +45,6 @@ Aprendizaje.md
 build_static_html.py
 generate_static_json.py
 frontend/static_data.json
-index.html
+/index.html
 
 
