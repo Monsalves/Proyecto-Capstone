@@ -291,15 +291,7 @@ def seed_demo_data_if_empty():
     finally:
         db_seed.close()
 
-from contextlib import asynccontextmanager
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Seed demo data for tmco-pcon on first launch so the app is ready immediately."""
-    seed_demo_data_if_empty()
-    yield
-
-app = FastAPI(title="JAC Revenue Sandbox API", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="JAC Revenue Sandbox API", version="1.0.0")
 
 # Seed demo data at import time so it works with uvicorn, TestClient, and pytest
 seed_demo_data_if_empty()
@@ -330,6 +322,242 @@ class ProyectarRequest(BaseModel):
     hora: str
     tarifa: float
     cupos_proteccion: int
+
+class TramoRequest(BaseModel):
+    id: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1)
+    targetSeats: int = Field(..., ge=0)
+    price: float = Field(..., gt=0)
+    color: Optional[str] = None
+
+class ProyectarV2Request(BaseModel):
+    ruta: str
+    fecha: str
+    hora: str
+    tarifa_base: float = Field(..., gt=0)
+    capacidad_bus: int = Field(..., ge=1, le=100)
+    tramos: List[TramoRequest] = Field(default_factory=list)
+    seatPlan: List[Optional[str]] = Field(default_factory=list)
+
+def _predict_occupancy(model, route_to_idx, ruta, fecha, hora, capacidad, tarifa_base_modelo, tarifa_efectiva):
+    dt = datetime.strptime(fecha, "%Y-%m-%d")
+    dia_sem = dt.weekday()
+    is_wk = int(dia_sem >= 5)
+    mes = dt.month
+
+    parts = hora.split(":")
+    h_min = int(parts[0]) * 60 + int(parts[1]) if len(parts) > 1 else 0
+
+    route_enc = route_to_idx[ruta]
+    features_base = [[route_enc, dia_sem, is_wk, mes, h_min, float(tarifa_base_modelo)]]
+    pred_base = model.predict(features_base)[0]
+    ocup_base_val = max(0.0, min(float(capacidad), float(pred_base)))
+
+    elasticidad = -1.2
+    ratio_precio = float(tarifa_efectiva) / float(tarifa_base_modelo) if tarifa_base_modelo > 0 else 1.0
+    ocup_final = ocup_base_val * (ratio_precio ** elasticidad)
+    return max(0.0, min(float(capacidad), float(ocup_final)))
+
+def _build_booking_curves(db, ruta, capacidad, ocupacion_actual):
+    hist_tickets = db.query(RegistroHistoricoDB).filter(RegistroHistoricoDB.ruta == ruta).all()
+    dates = set(t.fecha_salida for t in hist_tickets)
+    curve_by_date = {d: {day: 0 for day in range(-30, 1)} for d in dates}
+    for t in hist_tickets:
+        if t.fecha_salida in curve_by_date and t.dias_anticipacion is not None and 0 <= t.dias_anticipacion <= 30:
+            start_day = -t.dias_anticipacion
+            for day in range(start_day, 1):
+                curve_by_date[t.fecha_salida][day] += 1
+
+    hist_curve = []
+    for day in range(-30, 1):
+        vals = [curve_by_date[d][day] for d in dates] if dates else [0]
+        avg_val = np.mean(vals) if vals else 0.0
+        hist_curve.append({"dias_anticipacion": day, "asientos_acumulados": round(float(avg_val), 1)})
+
+    proj_curve = []
+    final_hist_val = hist_curve[-1]["asientos_acumulados"] if hist_curve else 0.0
+    for hc in hist_curve:
+        scale = (ocupacion_actual / final_hist_val) if final_hist_val > 0 else 0.0
+        proj_val = hc["asientos_acumulados"] * scale
+        proj_curve.append({
+            "dias_anticipacion": hc["dias_anticipacion"],
+            "asientos_acumulados": round(max(0.0, min(float(capacidad), proj_val)), 1)
+        })
+
+    return hist_curve, proj_curve
+
+def _build_legacy_projection_response(db, model, route_to_idx, ruta, fecha, hora, capacidad, tarifa_actual, cupos_actual):
+    base_esc = get_escenario_base(ruta, fecha, hora)
+    t_base = base_esc["tarifa_base"]
+    c_base = base_esc["cupos_proteccion_sugeridos"]
+
+    def calc_revenue(ocupacion_val, tarifa_val, cupos_val):
+        cupos_efectivos = min(ocupacion_val, float(cupos_val))
+        ing_prot = cupos_efectivos * tarifa_val
+        ing_ant = max(0.0, ocupacion_val - cupos_efectivos) * (tarifa_val * 0.85)
+        return ing_prot + ing_ant
+
+    ocup_actual = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, t_base, tarifa_actual
+    )
+    ing_actual = calc_revenue(ocup_actual, tarifa_actual, cupos_actual)
+
+    ocup_base = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, t_base, t_base
+    )
+    ing_base = calc_revenue(ocup_base, t_base, c_base)
+
+    var_ing = ((ing_actual - ing_base) / ing_base * 100.0) if ing_base > 0 else 0.0
+    var_ocup = (ocup_actual / capacidad * 100.0) - (ocup_base / capacidad * 100.0)
+
+    hist_curve, proj_curve = _build_booking_curves(db, ruta, capacidad, ocup_actual)
+
+    ocup_t_up = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, t_base, tarifa_actual * 1.10
+    )
+    ing_t_up = calc_revenue(ocup_t_up, tarifa_actual * 1.10, cupos_actual)
+    impact_t_up = ing_t_up - ing_actual
+
+    ocup_t_down = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, t_base, tarifa_actual * 0.90
+    )
+    ing_t_down = calc_revenue(ocup_t_down, tarifa_actual * 0.90, cupos_actual)
+    impact_t_down = ing_t_down - ing_actual
+
+    delta_c = max(1, int(capacidad * 0.10))
+    c_up = min(capacidad, cupos_actual + delta_c)
+    ocup_c_up = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, t_base, tarifa_actual
+    )
+    ing_c_up = calc_revenue(ocup_c_up, tarifa_actual, c_up)
+    impact_c_up = ing_c_up - ing_actual
+
+    c_down = max(0, cupos_actual - delta_c)
+    ocup_c_down = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, t_base, tarifa_actual
+    )
+    ing_c_down = calc_revenue(ocup_c_down, tarifa_actual, c_down)
+    impact_c_down = ing_c_down - ing_actual
+
+    tornado = [
+        {
+            "variable": "Tarifa",
+            "impacto_subida_10": round(impact_t_up),
+            "impacto_bajada_10": round(impact_t_down)
+        },
+        {
+            "variable": "Cupos de protección",
+            "impacto_subida_10": round(impact_c_up),
+            "impacto_bajada_10": round(impact_c_down)
+        }
+    ]
+
+    ajustes_precio = [-5, 0, 5, 10]
+    valores_cupos = [5, 10, 15, 20]
+    sensibilidad_cruzada = []
+
+    for adj in ajustes_precio:
+        p_val = tarifa_actual * (1 + adj / 100)
+        ocup_val = _predict_occupancy(
+            model, route_to_idx, ruta, fecha, hora, capacidad, t_base, p_val
+        )
+        puntos = []
+        for c in valores_cupos:
+            ing = calc_revenue(ocup_val, p_val, c)
+            puntos.append({
+                "cupos": c,
+                "ingreso": round(ing)
+            })
+        sensibilidad_cruzada.append({
+            "etiqueta": f"{adj:+}% precio" if adj != 0 else "0% precio",
+            "puntos": puntos
+        })
+
+    return {
+        "escenario_base": {
+            "ingreso_proyectado": round(ing_base),
+            "ocupacion_proyectada": round(ocup_base, 1),
+            "ocupacion_porcentaje": round(ocup_base / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
+            "tarifa": round(t_base),
+            "cupos_proteccion": c_base
+        },
+        "escenario_actual": {
+            "ingreso_proyectado": round(ing_actual),
+            "ocupacion_proyectada": round(ocup_actual, 1),
+            "ocupacion_porcentaje": round(ocup_actual / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
+            "tarifa": round(tarifa_actual),
+            "cupos_proteccion": cupos_actual,
+            "variacion_ingreso_porcentaje": round(var_ing, 1),
+            "variacion_ocupacion_puntos": round(var_ocup, 1)
+        },
+        "booking_curve": {
+            "historica": hist_curve,
+            "proyectada": proj_curve
+        },
+        "tornado": tornado,
+        "sensibilidad_cruzada": sensibilidad_cruzada
+    }
+
+def _build_bus_metrics(req: ProyectarV2Request):
+    if len(req.seatPlan) != req.capacidad_bus:
+        raise HTTPException(
+            status_code=400,
+            detail=f"seatPlan debe tener exactamente {req.capacidad_bus} posiciones."
+        )
+
+    tramo_by_id = {}
+    for tramo in req.tramos:
+        if tramo.id in tramo_by_id:
+            raise HTTPException(status_code=400, detail=f"Tramo duplicado: '{tramo.id}'.")
+        tramo_by_id[tramo.id] = tramo
+
+    unknown_ids = sorted({seat_id for seat_id in req.seatPlan if seat_id is not None and seat_id not in tramo_by_id})
+    if unknown_ids:
+        raise HTTPException(
+            status_code=400,
+            detail=f"seatPlan contiene tramos inexistentes: {', '.join(unknown_ids)}"
+        )
+
+    counts_by_id = {tramo.id: 0 for tramo in req.tramos}
+    for seat_id in req.seatPlan:
+        if seat_id is not None:
+            counts_by_id[seat_id] += 1
+
+    base_seats = sum(1 for seat_id in req.seatPlan if seat_id is None)
+    priced_seats = req.capacidad_bus - base_seats
+    tier_metrics = []
+    weighted_revenue = base_seats * float(req.tarifa_base)
+
+    for tramo in req.tramos:
+        assigned = counts_by_id[tramo.id]
+        subtotal = assigned * float(tramo.price)
+        weighted_revenue += subtotal
+        tier_metrics.append({
+            "id": tramo.id,
+            "nombre": tramo.name,
+            "color": tramo.color,
+            "precio": round(float(tramo.price)),
+            "target_seats": tramo.targetSeats,
+            "asientos_asignados": assigned,
+            "ingreso_potencial": round(subtotal),
+            "desviacion_vs_target": assigned - tramo.targetSeats
+        })
+
+    tarifa_ponderada = weighted_revenue / req.capacidad_bus if req.capacidad_bus > 0 else 0.0
+    average_tier_price = (
+        sum(item["ingreso_potencial"] for item in tier_metrics) / priced_seats
+        if priced_seats > 0 else float(req.tarifa_base)
+    )
+
+    return {
+        "tramo_by_id": tramo_by_id,
+        "base_seats": base_seats,
+        "priced_seats": priced_seats,
+        "tier_metrics": tier_metrics,
+        "weighted_revenue": weighted_revenue,
+        "tarifa_ponderada": tarifa_ponderada,
+        "average_tier_price": average_tier_price
+    }
 
 @app.get("/api/sistema/estado")
 def get_estado():
@@ -575,6 +803,7 @@ def get_escenario_base(ruta: str, fecha: str, hora: str):
         "hora": hora,
         "tarifa_base": round(tarifa_base),
         "cupos_proteccion_sugeridos": cupos_sug,
+        "precio_referencia": round(tarifa_base),
         "ocupacion_historica_promedio": round(ocupacion_prom, 1),
         "ingreso_historico_promedio": round(ingreso_prom)
     }
@@ -595,140 +824,137 @@ def post_proyectar(req: ProyectarRequest):
     if req.ruta not in route_to_idx:
         db.close()
         raise HTTPException(status_code=400, detail=f"Ruta '{req.ruta}' no encontrada en el modelo entrenado.")
-        
+
+    response = _build_legacy_projection_response(
+        db, model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, req.tarifa, req.cupos_proteccion
+    )
+    db.close()
+    return response
+
+@app.post("/api/simulacion/proyectar-v2")
+def post_proyectar_v2(req: ProyectarV2Request):
+    if not os.path.exists(MODEL_PATH):
+        raise HTTPException(status_code=400, detail="El modelo no ha sido entrenado. Cargue el CSV en configuración.")
+
+    db = SessionLocal()
+    config = db.query(ConfiguracionDB).filter(ConfiguracionDB.id == 1).first()
+    capacidad = config.capacidad_bus
+
+    if req.capacidad_bus != capacidad:
+        db.close()
+        raise HTTPException(
+            status_code=400,
+            detail=f"capacidad_bus enviada ({req.capacidad_bus}) no coincide con la configuración actual ({capacidad})."
+        )
+
+    payload = joblib.load(MODEL_PATH)
+    model = payload["model"]
+    route_to_idx = payload["route_to_idx"]
+
+    if req.ruta not in route_to_idx:
+        db.close()
+        raise HTTPException(status_code=400, detail=f"Ruta '{req.ruta}' no encontrada en el modelo entrenado.")
+
+    metrics = _build_bus_metrics(req)
     base_esc = get_escenario_base(req.ruta, req.fecha, req.hora)
-    t_base = base_esc["tarifa_base"]
-    c_base = base_esc["cupos_proteccion_sugeridos"]
-    
-    dt = datetime.strptime(req.fecha, "%Y-%m-%d")
-    dia_sem = dt.weekday()
-    is_wk = int(dia_sem >= 5)
-    mes = dt.month
-    
-    parts = req.hora.split(":")
-    h_min = int(parts[0]) * 60 + int(parts[1]) if len(parts) > 1 else 0
-    
-    def predict_occupancy(tarifa_val, _unused_cupos=None):
-        route_enc = route_to_idx[req.ruta]
-        features_base = [[route_enc, dia_sem, is_wk, mes, h_min, float(t_base)]]
-        pred_base = model.predict(features_base)[0]
-        ocup_base_val = max(0.0, min(float(capacidad), float(pred_base)))
-        
-        elasticidad = -1.2
-        ratio_precio = float(tarifa_val) / float(t_base) if t_base > 0 else 1.0
-        ocup_final = ocup_base_val * (ratio_precio ** elasticidad)
-        return max(0.0, min(float(capacidad), float(ocup_final)))
-        
-    def calc_revenue(ocupacion_val, tarifa_val, cupos_val):
-        cupos_efectivos = min(ocupacion_val, float(cupos_val))
-        ing_prot = cupos_efectivos * tarifa_val
-        ing_ant = max(0.0, ocupacion_val - cupos_efectivos) * (tarifa_val * 0.85)
-        return ing_prot + ing_ant
-        
-    ocup_actual = predict_occupancy(req.tarifa, req.cupos_proteccion)
-    ing_actual = calc_revenue(ocup_actual, req.tarifa, req.cupos_proteccion)
-    
-    ocup_base = predict_occupancy(t_base, c_base)
-    ing_base = calc_revenue(ocup_base, t_base, c_base)
-    
-    var_ing = ((ing_actual - ing_base) / ing_base * 100.0) if ing_base > 0 else 0.0
+    tarifa_base_modelo = base_esc["tarifa_base"]
+
+    ocup_actual = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"]
+    )
+    ocup_base = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, tarifa_base_modelo
+    )
+
+    factor_ocupacion = (ocup_actual / capacidad) if capacidad > 0 else 0.0
+    ingreso_actual = metrics["weighted_revenue"] * factor_ocupacion
+    ingreso_base = ocup_base * tarifa_base_modelo
+
+    var_ing = ((ingreso_actual - ingreso_base) / ingreso_base * 100.0) if ingreso_base > 0 else 0.0
     var_ocup = (ocup_actual / capacidad * 100.0) - (ocup_base / capacidad * 100.0)
-    
-    # Booking curve logic
-    hist_tickets = db.query(RegistroHistoricoDB).filter(RegistroHistoricoDB.ruta == req.ruta).all()
-    dates = set(t.fecha_salida for t in hist_tickets)
-    curve_by_date = {d: {day: 0 for day in range(-30, 1)} for d in dates}
-    for t in hist_tickets:
-        if t.fecha_salida in curve_by_date and t.dias_anticipacion is not None and 0 <= t.dias_anticipacion <= 30:
-            start_day = -t.dias_anticipacion
-            for day in range(start_day, 1):
-                curve_by_date[t.fecha_salida][day] += 1
-                
-    hist_curve = []
-    for day in range(-30, 1):
-        vals = [curve_by_date[d][day] for d in dates] if dates else [0]
-        avg_val = np.mean(vals) if vals else 0.0
-        hist_curve.append({"dias_anticipacion": day, "asientos_acumulados": round(float(avg_val), 1)})
-        
-    proj_curve = []
-    final_hist_val = hist_curve[-1]["asientos_acumulados"]
-    for hc in hist_curve:
-        scale = (ocup_actual / final_hist_val) if final_hist_val > 0 else 0.0
-        proj_val = hc["asientos_acumulados"] * scale
-        proj_curve.append({
-            "dias_anticipacion": hc["dias_anticipacion"],
-            "asientos_acumulados": round(max(0.0, min(float(capacidad), proj_val)), 1)
-        })
-        
-    # Sensitivity (Tornado)
-    ocup_t_up = predict_occupancy(req.tarifa * 1.10, req.cupos_proteccion)
-    ing_t_up = calc_revenue(ocup_t_up, req.tarifa * 1.10, req.cupos_proteccion)
-    impact_t_up = ing_t_up - ing_actual
-    
-    ocup_t_down = predict_occupancy(req.tarifa * 0.90, req.cupos_proteccion)
-    ing_t_down = calc_revenue(ocup_t_down, req.tarifa * 0.90, req.cupos_proteccion)
-    impact_t_down = ing_t_down - ing_actual
-    
-    delta_c = max(1, int(capacidad * 0.10))
-    c_up = min(capacidad, req.cupos_proteccion + delta_c)
-    ocup_c_up = predict_occupancy(req.tarifa, c_up)
-    ing_c_up = calc_revenue(ocup_c_up, req.tarifa, c_up)
-    impact_c_up = ing_c_up - ing_actual
-    
-    c_down = max(0, req.cupos_proteccion - delta_c)
-    ocup_c_down = predict_occupancy(req.tarifa, c_down)
-    ing_c_down = calc_revenue(ocup_c_down, req.tarifa, c_down)
-    impact_c_down = ing_c_down - ing_actual
-    
+
+    hist_curve, proj_curve = _build_booking_curves(db, req.ruta, capacidad, ocup_actual)
+
+    ocup_t_up = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"] * 1.10
+    )
+    ingreso_t_up = metrics["weighted_revenue"] * 1.10 * (ocup_t_up / capacidad if capacidad > 0 else 0.0)
+    impact_t_up = ingreso_t_up - ingreso_actual
+
+    ocup_t_down = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"] * 0.90
+    )
+    ingreso_t_down = metrics["weighted_revenue"] * 0.90 * (ocup_t_down / capacidad if capacidad > 0 else 0.0)
+    impact_t_down = ingreso_t_down - ingreso_actual
+
+    delta_base = max(1, int(capacidad * 0.10))
+
+    def potential_revenue_for_base_seats(base_seats):
+        bounded_base = max(0, min(capacidad, int(base_seats)))
+        priced_seats = capacidad - bounded_base
+        return (bounded_base * float(req.tarifa_base)) + (priced_seats * float(metrics["average_tier_price"]))
+
+    ingreso_base_up = potential_revenue_for_base_seats(metrics["base_seats"] + delta_base)
+    impact_base_up = ingreso_base_up * factor_ocupacion - ingreso_actual
+
+    ingreso_base_down = potential_revenue_for_base_seats(metrics["base_seats"] - delta_base)
+    impact_base_down = ingreso_base_down * factor_ocupacion - ingreso_actual
+
     tornado = [
         {
-            "variable": "Tarifa",
+            "variable": "Tarifa promedio ponderada",
             "impacto_subida_10": round(impact_t_up),
             "impacto_bajada_10": round(impact_t_down)
         },
         {
-            "variable": "Cupos de protección",
-            "impacto_subida_10": round(impact_c_up),
-            "impacto_bajada_10": round(impact_c_down)
+            "variable": "Asientos base",
+            "impacto_subida_10": round(impact_base_up),
+            "impacto_bajada_10": round(impact_base_down)
         }
     ]
-    
-    # Sensibilidad Cruzada: Precio vs Cupos
+
     ajustes_precio = [-5, 0, 5, 10]
-    valores_cupos = [5, 10, 15, 20]
     sensibilidad_cruzada = []
-    
+    base_seat_options = sorted(set([
+        max(0, metrics["base_seats"] - 5),
+        metrics["base_seats"],
+        min(capacidad, metrics["base_seats"] + 5),
+        min(capacidad, metrics["base_seats"] + 10)
+    ]))
+
     for adj in ajustes_precio:
-        p_val = req.tarifa * (1 + adj / 100)
-        ocup_val = predict_occupancy(p_val)
+        tarifa_mix = metrics["tarifa_ponderada"] * (1 + adj / 100)
+        ocup_val = _predict_occupancy(
+            model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, tarifa_mix
+        )
         puntos = []
-        for c in valores_cupos:
-            ing = calc_revenue(ocup_val, p_val, c)
+        for base_seats in base_seat_options:
+            ingreso_potencial_mix = potential_revenue_for_base_seats(base_seats)
+            price_scale = (tarifa_mix / metrics["tarifa_ponderada"]) if metrics["tarifa_ponderada"] > 0 else 1.0
+            ingreso_mix = ingreso_potencial_mix * price_scale * (ocup_val / capacidad if capacidad > 0 else 0.0)
             puntos.append({
-                "cupos": c,
-                "ingreso": round(ing)
+                "cupos": base_seats,
+                "ingreso": round(ingreso_mix)
             })
         sensibilidad_cruzada.append({
             "etiqueta": f"{adj:+}% precio" if adj != 0 else "0% precio",
             "puntos": puntos
         })
-        
-    db.close()
-    
-    return {
+
+    response = {
         "escenario_base": {
-            "ingreso_proyectado": round(ing_base),
+            "ingreso_proyectado": round(ingreso_base),
             "ocupacion_proyectada": round(ocup_base, 1),
             "ocupacion_porcentaje": round(ocup_base / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
-            "tarifa": round(t_base),
-            "cupos_proteccion": c_base
+            "tarifa": round(tarifa_base_modelo),
+            "cupos_proteccion": 0
         },
         "escenario_actual": {
-            "ingreso_proyectado": round(ing_actual),
+            "ingreso_proyectado": round(ingreso_actual),
             "ocupacion_proyectada": round(ocup_actual, 1),
             "ocupacion_porcentaje": round(ocup_actual / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
-            "tarifa": round(req.tarifa),
-            "cupos_proteccion": req.cupos_proteccion,
+            "tarifa": round(metrics["tarifa_ponderada"]),
+            "cupos_proteccion": 0,
             "variacion_ingreso_porcentaje": round(var_ing, 1),
             "variacion_ocupacion_puntos": round(var_ocup, 1)
         },
@@ -737,5 +963,17 @@ def post_proyectar(req: ProyectarRequest):
             "proyectada": proj_curve
         },
         "tornado": tornado,
-        "sensibilidad_cruzada": sensibilidad_cruzada
+        "sensibilidad_cruzada": sensibilidad_cruzada,
+        "composicion_bus": {
+            "capacidad_bus": capacidad,
+            "asientos_base": metrics["base_seats"],
+            "asientos_tarifados": capacidad - metrics["base_seats"],
+            "tarifa_base": round(req.tarifa_base),
+            "tarifa_promedio_ponderada": round(metrics["tarifa_ponderada"]),
+            "ingreso_potencial_total": round(metrics["weighted_revenue"]),
+            "tramos": metrics["tier_metrics"]
+        }
     }
+
+    db.close()
+    return response

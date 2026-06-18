@@ -1,106 +1,256 @@
-# Manual de Usuario - SimJAC V2 Revenue Sandbox
+# JAC Revenue Sandbox
 
-¡Bienvenido al **JAC Revenue Sandbox**! Este manual te guiará detalladamente sobre cómo utilizar el simulador comercial, qué significa cada gráfico interactivo y cómo interpretarlos con capturas de pantalla reales.
+Simulador comercial para Buses JAC con frontend estático servido por FastAPI y backend de simulación con modelo de ocupación entrenable.
 
----
+El estado actual del proyecto ya no usa sliders de `tarifa + cupos_proteccion` como interfaz principal. La UI trabaja con:
 
-## 1. ¿Cómo configurar la simulación?
+- `tarifa_base`
+- `tramos comerciales`
+- `seatPlan` por asiento
+- simulación backend `v2`
 
-En el panel lateral izquierdo tienes los controles de entrada. Configura la **Ruta**, la **Temporada** (Verano, Invierno o Media) y el **Tipo de Día** (Semana o Fin de semana). 
+## Estado actual
 
-Luego, ajusta los dos sliders clave:
-* **Tarifa Aplicada ($):** Para subir o bajar el precio de los pasajes.
-* **Cupos de Protección (Asientos):** Para guardar asientos para las ventas de última hora (sin descuento).
+### Frontend
 
-Al hacer cualquier modificación, los siguientes gráficos se actualizarán al instante:
+Archivo principal:
 
----
+- `frontend/index.html`
 
-## 2. Explicación Detallada de los Gráficos
+Capacidades actuales:
 
-### A. Gráfico 1: Comparación de Ingresos (Base vs. Optimizado RM)
+- selección de `ruta`, `hora`, `temporada` y `tipo de día`
+- definición manual de `tarifa base`
+- creación de múltiples `tramos`
+- asignación automática de asientos por tramo
+- visualización horizontal del bus
+- resumen de `Escenario Actual`
+- simulación manual con botón `Simular escenario`
 
-Este gráfico compara los ingresos totales estimando tu nueva estrategia comercial frente al comportamiento histórico promedio.
+### Backend
 
-![Gráfico de Comparación de Ingresos](images/comparison_chart_crop.png)
+Archivo principal:
 
-#### Cómo interpretarlo:
-* **Barra Azul/Gris ("Escenario Base"):** Representa el ingreso real que Buses JAC ha obtenido históricamente en promedio para esta ruta y horario ($CLP). Es tu punto de partida.
-* **Barra Roja ("Escenario Optimizado RM"):** Representa la proyección de ingresos con la tarifa y cupos de protección que fijaste en los sliders.
-* **Meta Comercial:** Tu objetivo es lograr que la **barra roja sea más alta que la barra azul**. Si es más alta, tu estrategia de Revenue Management está generando más rentabilidad que el promedio histórico.
+- `backend/app/main.py`
 
----
+Capacidades actuales:
 
-### B. Gráfico 2: Curva de Ventas (Booking Curve)
+- API FastAPI que sirve también el frontend
+- carga de CSV histórico
+- persistencia local en `db.sqlite3`
+- modelo entrenado guardado en `model.joblib`
+- endpoint legado `POST /api/simulacion/proyectar`
+- endpoint nuevo `POST /api/simulacion/proyectar-v2`
 
-Muestra la velocidad y el acumulado de venta de asientos a lo largo del tiempo, desde 30 días antes de la salida del bus (Día -30) hasta el momento de partida (Día 0).
+## Arquitectura
 
-![Gráfico de Curva de Ventas](images/curve_chart_crop.png)
+### Persistencia
 
-#### Cómo interpretarlo:
-* **Línea Azul Continua ("Histórico Promedio"):** Muestra el ritmo de reserva tradicional de la corrida. Sirve para saber en qué momento del mes se suele llenar el bus.
-* **Línea Roja Discontinua ("Proyección Escenario"):** Es el ritmo de reserva estimado con la nueva tarifa que configuraste en el slider.
-  * *Si bajas el precio:* Verás que la línea roja sube rápido y empinada hacia el tope de asientos, indicando que el bus se llenará temprano debido al descuento.
-  * *Si subes el precio:* La línea roja será más plana y baja, indicando una velocidad de venta más lenta. Gracias al **modelo de elasticidad de precios**, si la tarifa es muy alta, verás que la curva termina muy abajo el Día 0 (el bus se va semi-vacío).
-* **Línea de Puntos Gris ("Capacidad"):** El límite físico del bus (45 asientos). Ninguna curva puede superar esta línea.
+- `RegistroHistoricoDB`: boletos históricos a nivel ticket
+- `SalidaAgregadaDB`: salidas agregadas por ruta/fecha/hora
+- `ConfiguracionDB`: configuración general y métricas del modelo
 
----
+Base por defecto:
 
-### C. Gráfico 3: Análisis de Sensibilidad (Gráfico de Tornado)
+- `sqlite:///./db.sqlite3`
 
-Este gráfico te ayuda a entender el riesgo y el impacto marginal de tus decisiones comerciales. Mide cuánto varían tus ingresos si haces pequeños cambios en tus sliders (10% en tarifa y 10% en cupos con respecto a la capacidad del bus).
+### Modelo de ML
 
-![Gráfico de Tornado](images/tornado_chart_crop.png)
+Se usa:
 
-#### Cómo interpretarlo:
-* **Fila "Tarifa Aplicada" (Impacto de precios):**
-  * **Barra Verde (Derecha, Valor Positivo):** Muestra los ingresos extra que ganarías si **subes un 10% adicional** la tarifa seleccionada.
-  * **Barra Roja (Izquierda, Valor Negativo):** Muestra el dinero que dejarías de percibir si **bajas un 10%** la tarifa seleccionada.
-* **Fila "Cupos de protección" (Impacto de asientos protegidos):**
-  * Muestra el impacto en el ingreso total si sumas o restas cupos a tu reserva de última hora.
-* **Análisis Estratégico:** 
-  * La barra más ancha es la variable más sensible. Verás que la barra de **Tarifa Aplicada** es siempre mucho más grande que la de **Cupos de protección**. Esto significa que cambiar el precio de los pasajes tiene un impacto mucho más masivo en la caja final de Buses JAC que cambiar los cupos de protección individuales.
+- `RandomForestRegressor` de `scikit-learn`
 
----
+Target:
 
-### D. Gráfico 4: Sensibilidad Cruzada (Precio vs. Cupos Protegidos)
+- `asientos_vendidos`
 
-Este gráfico combina las dos decisiones críticas de Revenue Management en un mapa global de ingresos, mostrando múltiples escenarios proyectados de forma simultánea.
+Features:
 
-![Gráfico de Sensibilidad Cruzada](images/dashboard_side_by_side_sensitivity.png)
+- `ruta_encoded`
+- `dia_semana`
+- `es_fin_de_semana`
+- `mes`
+- `hora_salida_minutos`
+- `tarifa_promedio`
 
-#### Cómo interpretarlo:
-* **Eje X (Cupos Protegidos):** Evalúa el desempeño al reservar 5, 10, 15 o 20 asientos para compras de última hora.
-* **Eje Y (Ingreso Total):** Muestra el resultado de caja proyectado ($CLP).
-* **Las Líneas (Variaciones de Tarifa):**
-  * **Verde (-5% precio):** Ingreso esperado si rebajas la tarifa actual un 5%.
-  * **Naranja (0% precio):** Ingreso esperado con la tarifa que tienes seleccionada actualmente.
-  * **Azul (+5% precio):** Ingreso esperado si aumentas la tarifa actual un 5%.
-  * **Rosado (+10% precio):** Ingreso esperado si aumentas la tarifa actual un 10%.
-* **Análisis Estratégico:**
-  * **Pendiente Ascendente:** Si las líneas suben de izquierda a derecha (como en la captura), indica que **proteger más asientos aumenta el ingreso**. Esto ocurre cuando la demanda proyectada es lo suficientemente fuerte como para absorber los cupos reservados a tarifa alta de última hora.
-  * **Separación de Líneas:** Te permite ver de un vistazo qué nivel de tarifa es más rentable. Si la línea rosada (+10%) o azul (+5%) está por encima de las otras, subir los precios es conveniente. Si se cruzan o la verde (-5%) queda arriba, indica alta elasticidad y es mejor vender más barato.
-  * **Decisión Directa:** El equipo comercial puede ubicar el punto más alto del gráfico completo (en este caso, 20 cupos con +10% de precio) para saber instantáneamente cuál es la estrategia óptima sin necesidad de probar combinaciones una a una en los sliders.
+Entrenamiento:
 
----
+- si la base está vacía, el sistema genera un dataset demo sintético y entrena automáticamente al arrancar
+- si se carga un CSV desde la UI o API, se reconstruyen las tablas agregadas y se reentrena el modelo
 
-## 3. Despliegue Continuo (CI/CD) en Azure VM con GitHub Actions
+### Simulación `v2`
 
-El proyecto está configurado para compilarse automáticamente, ejecutar pruebas de backend y desplegarse en una máquina virtual de Azure en cada push a la rama `main`.
+El frontend envía:
 
-### Requisitos en la Máquina Virtual de Azure
-1. Tener **Docker** y **Docker Compose** instalados y habilitados.
-2. Clonar el repositorio por primera vez en el directorio del usuario:
-   ```bash
-   cd ~
-   git clone <URL_DE_TU_REPOSITORIO> PROYECTO_JAC
-   ```
+```json
+{
+  "ruta": "tmco-pcon",
+  "fecha": "2023-10-18",
+  "hora": "09:30",
+  "tarifa_base": 5000,
+  "capacidad_bus": 45,
+  "tramos": [
+    {
+      "id": "tier-1",
+      "name": "Promo temprana",
+      "targetSeats": 10,
+      "price": 4200,
+      "color": "#0ea5e9"
+    }
+  ],
+  "seatPlan": ["tier-1", null, null]
+}
+```
 
-### Configuración en GitHub Secrets
-Para habilitar el despliegue automático, agrega los siguientes **Secrets** en tu repositorio de GitHub (`Settings > Secrets and variables > Actions`):
+El backend:
 
-* `AZURE_VM_HOST`: La IP pública o DNS de tu máquina virtual en Azure.
-* `AZURE_VM_USER`: El usuario SSH de tu máquina virtual (ej. `azureuser`, `ubuntu`).
-* `AZURE_VM_KEY`: La clave privada SSH (`id_rsa`) con la que accedes a la máquina virtual.
-* `AZURE_VM_PORT`: (Opcional) Puerto SSH de la máquina virtual (por defecto `22`).
+1. valida `capacidad_bus`, `tramos` y `seatPlan`
+2. calcula composición real del bus
+3. construye `tarifa_promedio_ponderada`
+4. estima ocupación con el modelo actual
+5. devuelve ingreso, ocupación, curvas y sensibilidad
 
+Respuesta adicional relevante:
+
+- `composicion_bus`
+
+Incluye:
+
+- `asientos_base`
+- `asientos_tarifados`
+- `tarifa_promedio_ponderada`
+- `ingreso_potencial_total`
+- detalle por tramo
+
+## Estructura del repositorio
+
+```text
+backend/
+  app/
+    main.py
+  tests/
+    test_main.py
+frontend/
+  index.html
+.github/workflows/
+  deploy.yml
+Dockerfile
+docker-compose.yml
+requirements.txt
+```
+
+## Requisitos
+
+- Python 3.11+ recomendado
+- `pip`
+- opcional: entorno virtual `.venv`
+- opcional: Docker y Docker Compose para despliegue local/contenedorizado
+
+## Ejecución local
+
+### 1. Instalar dependencias
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Levantar el servidor
+
+```bash
+PYTHONPATH=. ./.venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8002
+```
+
+Abrir en navegador:
+
+- `http://127.0.0.1:8002`
+
+### 3. Verificar API
+
+```bash
+curl http://127.0.0.1:8002/openapi.json
+curl http://127.0.0.1:8002/api/sistema/estado
+curl http://127.0.0.1:8002/api/rutas
+```
+
+Debe existir este endpoint:
+
+- `POST /api/simulacion/proyectar-v2`
+
+## Pruebas
+
+Suite actual:
+
+```bash
+.venv/bin/pytest -q backend/tests/test_main.py
+```
+
+Estado esperado actual:
+
+- tests de backend y simulación `v2`
+- un caso de carga CSV marcado como `skip` por comportamiento de `UploadFile.read()` en este entorno
+
+## Despliegue con Docker
+
+### Build y run local
+
+```bash
+docker compose up -d --build
+```
+
+Expone:
+
+- `http://localhost:8001`
+
+Persistencia Docker:
+
+- volumen `jac_data`
+
+## CI/CD
+
+Workflow:
+
+- `.github/workflows/deploy.yml`
+
+Flujo actual:
+
+1. `push` a `main`
+2. GitHub Actions instala dependencias
+3. corre `pytest backend/tests/test_main.py`
+4. si pasa, hace deploy por SSH a Azure VM
+5. en la VM ejecuta:
+   - `git fetch`
+   - `git reset --hard origin/main`
+   - `docker compose down`
+   - `docker compose up -d --build`
+
+### Secrets necesarios
+
+- `AZURE_VM_HOST`
+- `AZURE_VM_USER`
+- `AZURE_VM_KEY`
+- `AZURE_VM_PORT` opcional
+
+## Comandos útiles
+
+### Reiniciar backend local
+
+```bash
+pkill -f "uvicorn backend.app.main:app" || true
+PYTHONPATH=. ./.venv/bin/python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8002
+```
+
+### Verificar endpoint `v2`
+
+```bash
+curl -X POST http://127.0.0.1:8002/api/simulacion/proyectar-v2 \
+  -H "Content-Type: application/json" \
+  --data '{"ruta":"tmco-pcon","fecha":"2023-10-18","hora":"09:30","tarifa_base":5000,"capacidad_bus":45,"tramos":[],"seatPlan":[null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]}'
+```
+
+## Notas
+
+- `MEMORIA_BACKEND.md` documenta el traspaso entre el modelo viejo y la simulación nueva basada en tramos.
+- La simulación `v2` ya está integrada con el frontend actual.
+- La lógica predictiva todavía usa una aproximación por `tarifa_promedio_ponderada`; el siguiente salto natural es modelar demanda por tramo o por banda de precio.

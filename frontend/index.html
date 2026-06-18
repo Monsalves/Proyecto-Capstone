@@ -9,98 +9,186 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/plotly.js-dist-min@2.24.1/plotly.min.js"></script>
     <style>
+        :root {
+            --bg: #f4efe7;
+            --bg-soft: #fbf7f1;
+            --surface: rgba(255, 252, 248, 0.92);
+            --surface-strong: #fffdf9;
+            --line: #e6d8c8;
+            --line-strong: #d9c2ab;
+            --ink: #231815;
+            --muted: #6f6258;
+            --accent: #b42318;
+            --accent-strong: #8f1d14;
+            --accent-soft: #f6d5c7;
+            --shadow: 0 20px 50px -28px rgba(72, 33, 18, 0.28);
+        }
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(180, 35, 24, 0.38) transparent;
+        }
+        *::selection {
+            background: rgba(180, 35, 24, 0.18);
+            color: var(--ink);
+        }
         body {
             font-family: 'Outfit', sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
+            background-color: var(--bg);
+            color: var(--ink);
             min-height: 100vh;
-            background-image: radial-gradient(circle at 10% 20%, rgba(220, 38, 38, 0.03) 0%, transparent 60%),
-                              radial-gradient(circle at 90% 80%, rgba(248, 113, 113, 0.05) 0%, transparent 60%);
+            background-image:
+                radial-gradient(circle at 12% 16%, rgba(180, 35, 24, 0.08) 0%, transparent 32%),
+                radial-gradient(circle at 88% 18%, rgba(237, 116, 63, 0.08) 0%, transparent 28%),
+                radial-gradient(circle at 80% 86%, rgba(127, 29, 29, 0.07) 0%, transparent 24%),
+                linear-gradient(180deg, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0) 38%),
+                linear-gradient(135deg, rgba(146, 64, 14, 0.035) 25%, transparent 25%),
+                linear-gradient(225deg, rgba(146, 64, 14, 0.035) 25%, transparent 25%);
+            background-size: auto, auto, auto, auto, 22px 22px, 22px 22px;
+            background-position: 0 0, 0 0, 0 0, 0 0, 0 0, 11px 11px;
+        }
+        body::before {
+            content: "";
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            background:
+                linear-gradient(90deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 20%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 100%);
+            opacity: 0.75;
         }
         .glass-card {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            border-radius: 16px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
-            transition: all 0.3s ease;
-            color: #1e293b;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(255,250,244,0.94) 100%);
+            border: 1px solid var(--line);
+            border-radius: 22px;
+            box-shadow: var(--shadow);
+            transition: transform 0.24s ease, box-shadow 0.24s ease, border-color 0.24s ease;
+            color: var(--ink);
+            position: relative;
+            overflow: hidden;
         }
         .glass-card:hover {
-            border-color: rgba(220, 38, 38, 0.20);
-            box-shadow: 0 10px 20px -3px rgba(0, 0, 0, 0.05);
+            border-color: rgba(180, 35, 24, 0.3);
+            box-shadow: 0 26px 58px -30px rgba(72, 33, 18, 0.34);
+            transform: translateY(-2px);
+        }
+        .glass-card::after {
+            content: "";
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: linear-gradient(135deg, rgba(255,255,255,0.28) 0%, transparent 34%);
+            opacity: 0.9;
+        }
+        .section-card {
+            position: relative;
+        }
+        .section-card::before {
+            content: "";
+            position: absolute;
+            inset: 0 0 auto 0;
+            height: 6px;
+            border-radius: 22px 22px 0 0;
+            background: var(--section-accent, linear-gradient(90deg, #cd3a2f, #951f16));
+            z-index: 1;
+        }
+        .section-title {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--section-title-color, var(--ink));
+            background: var(--section-pill-bg, rgba(180, 35, 24, 0.1));
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.55);
+        }
+        .section-subtle {
+            color: var(--muted);
+        }
+        .section-sim {
+            --section-accent: linear-gradient(90deg, #c2410c 0%, #ea580c 100%);
+            --section-pill-bg: rgba(251, 191, 36, 0.18);
+            --section-title-color: #8a3b12;
+        }
+        .section-tiers {
+            --section-accent: linear-gradient(90deg, #7c3aed 0%, #ec4899 100%);
+            --section-pill-bg: rgba(168, 85, 247, 0.14);
+            --section-title-color: #6d28d9;
+        }
+        .section-bus {
+            --section-accent: linear-gradient(90deg, #0891b2 0%, #0f766e 100%);
+            --section-pill-bg: rgba(34, 211, 238, 0.14);
+            --section-title-color: #0f766e;
+        }
+        .section-scenario {
+            --section-accent: linear-gradient(90deg, #b42318 0%, #dc2626 100%);
+            --section-pill-bg: rgba(180, 35, 24, 0.12);
+            --section-title-color: #9f1d15;
+        }
+        .section-results {
+            --section-accent: linear-gradient(90deg, #2563eb 0%, #4f46e5 100%);
+            --section-pill-bg: rgba(59, 130, 246, 0.12);
+            --section-title-color: #1d4ed8;
         }
         .header-brand {
-            background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+            letter-spacing: -0.03em;
+            background: linear-gradient(135deg, #d63b2c 0%, #8f1d14 58%, #5f160f 100%);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
-            font-weight: 700;
+            font-weight: 800;
         }
         .btn-gradient {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            border: none;
+            background: linear-gradient(135deg, #cd3a2f 0%, #951f16 68%, #71170f 100%);
+            border: 1px solid rgba(113, 23, 15, 0.4);
             color: white;
-            font-weight: 500;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            font-weight: 700;
+            letter-spacing: 0.01em;
+            border-radius: 14px;
+            box-shadow: 0 18px 28px -18px rgba(143, 29, 20, 0.7);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
         }
         .btn-gradient:hover {
-            background: linear-gradient(135deg, #f87171 0%, #ef4444 100%);
+            background: linear-gradient(135deg, #df5343 0%, #b42318 70%, #7f1d14 100%);
             transform: translateY(-2px);
-            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.3);
+            box-shadow: 0 24px 34px -20px rgba(143, 29, 20, 0.78);
+            filter: saturate(1.04);
             color: white;
         }
-        .custom-slider {
-            -webkit-appearance: none;
-            width: 100%;
-            height: 6px;
-            border-radius: 5px;
-            background: #e2e8f0;
-            outline: none;
-        }
-        .custom-slider::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: #dc2626;
-            cursor: pointer;
-            border: 2px solid #ffffff;
-            box-shadow: 0 0 10px rgba(220, 38, 38, 0.5);
-            transition: transform 0.1s;
-        }
-        .custom-slider::-webkit-slider-thumb:hover {
-            transform: scale(1.2);
-        }
         .text-accent {
-            color: #dc2626;
+            color: var(--accent);
         }
         .variation-badge {
-            font-size: 0.85rem;
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-weight: 600;
+            font-size: 0.8rem;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-weight: 700;
+            border: 1px solid transparent;
         }
         .badge-up {
-            background: rgba(22, 163, 74, 0.12);
-            color: #15803d;
+            background: rgba(22, 163, 74, 0.1);
+            color: #166534;
+            border-color: rgba(22, 163, 74, 0.14);
         }
         .badge-down {
-            background: rgba(220, 38, 38, 0.12);
-            color: #b91c1c;
+            background: rgba(180, 35, 24, 0.1);
+            color: #9f1d15;
+            border-color: rgba(180, 35, 24, 0.14);
         }
         .drag-drop-area {
-            border: 2px dashed rgba(220, 38, 38, 0.25);
-            border-radius: 12px;
+            border: 2px dashed rgba(180, 35, 24, 0.24);
+            border-radius: 18px;
             padding: 30px 20px;
             text-align: center;
-            background: rgba(254, 242, 242, 0.5);
+            background: linear-gradient(180deg, rgba(255, 245, 239, 0.95) 0%, rgba(251, 241, 233, 0.88) 100%);
             cursor: pointer;
             transition: all 0.2s ease;
-            color: #1e293b;
+            color: var(--ink);
         }
         .drag-drop-area:hover {
-            border-color: #dc2626;
-            background: #fee2e2;
+            border-color: var(--accent);
+            background: linear-gradient(180deg, rgba(255, 238, 230, 1) 0%, rgba(252, 231, 220, 0.96) 100%);
+            transform: translateY(-1px);
         }
         .progress-donut {
             position: relative;
@@ -121,6 +209,352 @@
             stroke-linecap: round;
             transition: stroke-dashoffset 0.5s ease;
         }
+        .scenario-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 16px;
+        }
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+            gap: 24px;
+            align-items: stretch;
+        }
+        .dashboard-grid > div {
+            min-width: 0;
+        }
+        .dashboard-main-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 16px;
+        }
+        .results-grid > div {
+            min-width: 0;
+        }
+        .chart-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-plot {
+            width: 100%;
+        }
+        .chart-plot-lg {
+            min-height: 310px;
+        }
+        .chart-plot-md {
+            min-height: 250px;
+        }
+        .chart-note {
+            margin-top: 10px;
+            text-align: center;
+            color: #64748b;
+            font-size: 0.82rem;
+        }
+        .tier-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .tier-panel-body {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            flex: 1;
+            min-height: 0;
+        }
+        .tier-scroll {
+            display: grid;
+            gap: 12px;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding-right: 4px;
+        }
+        .metric-tile {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.96) 0%, rgba(252,247,242,0.94) 100%);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.72);
+        }
+        .metric-tile.metric-hot {
+            background: linear-gradient(180deg, rgba(255, 241, 235, 0.98) 0%, rgba(252, 229, 219, 0.96) 100%);
+            border-color: rgba(180, 35, 24, 0.2);
+        }
+        .metric-tile.metric-calm {
+            background: linear-gradient(180deg, rgba(238, 250, 252, 0.98) 0%, rgba(223, 244, 247, 0.96) 100%);
+            border-color: rgba(8, 145, 178, 0.18);
+        }
+        .metric-tile.metric-sand {
+            background: linear-gradient(180deg, rgba(255, 247, 232, 0.98) 0%, rgba(251, 237, 204, 0.96) 100%);
+            border-color: rgba(217, 119, 6, 0.18);
+        }
+        .tier-card {
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            padding: 14px;
+            background: linear-gradient(180deg, rgba(255,255,255,0.97) 0%, rgba(252,248,242,0.94) 100%);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.8);
+        }
+        .tier-card.active {
+            border-color: rgba(180, 35, 24, 0.4);
+            box-shadow: 0 0 0 3px rgba(180, 35, 24, 0.08);
+        }
+        .top-bar-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+        }
+        .tier-swatch {
+            width: 14px;
+            height: 14px;
+            border-radius: 999px;
+            display: inline-block;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+        }
+        .tool-chip {
+            border: 1px solid var(--line-strong);
+            border-radius: 999px;
+            background: rgba(255, 253, 249, 0.95);
+            padding: 8px 12px;
+            font-size: 0.875rem;
+            font-weight: 700;
+            color: #5e4e44;
+        }
+        .tool-chip.active {
+            border-color: rgba(180, 35, 24, 0.38);
+            background: linear-gradient(180deg, rgba(255, 237, 229, 0.98) 0%, rgba(251, 226, 214, 0.95) 100%);
+            color: var(--accent-strong);
+        }
+        .bus-shell {
+            border: 1px solid var(--line);
+            border-radius: 24px;
+            background:
+                linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(248,241,233,0.96) 100%);
+            padding: 14px;
+            width: 100%;
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.82);
+        }
+        .bus-header {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 8px 12px;
+            background: rgba(255, 253, 249, 0.96);
+        }
+        .bus-layout {
+            display: flex;
+            align-items: stretch;
+            gap: 12px;
+        }
+        .bus-front {
+            width: 72px;
+            min-width: 72px;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(249,242,235,0.96) 100%);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 8px 6px;
+        }
+        .driver-zone {
+            width: 52px;
+            min-width: 52px;
+            height: 52px;
+            border-radius: 999px;
+            border: 1px solid var(--line);
+            background: rgba(247, 238, 229, 0.92);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #5f5148;
+            margin: 0 auto;
+        }
+        .front-divider {
+            height: 1px;
+            background: var(--line);
+            margin: 8px 0;
+        }
+        .bus-main {
+            flex: 1;
+            border: 1px solid var(--line);
+            border-radius: 16px;
+            background: rgba(255, 253, 249, 0.98);
+            padding: 14px 16px;
+            overflow-x: hidden;
+        }
+        .bus-columns {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            justify-content: space-between;
+            width: 100%;
+        }
+        .seat-column {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex: 1 1 0;
+            align-items: center;
+        }
+        .seat-column .seat-placeholder:nth-child(3),
+        .seat-column .seat-btn:nth-child(3) {
+            margin-top: 24px;
+        }
+        .seat-btn {
+            width: 100%;
+            max-width: 42px;
+            min-width: 36px;
+            min-height: 44px;
+            border-radius: 10px;
+            border: 1px solid rgba(166, 145, 124, 0.55);
+            background: linear-gradient(180deg, #fffdfa 0%, #f7efe7 100%);
+            color: var(--ink);
+            font-weight: 700;
+            font-size: 0.72rem;
+            padding: 3px 2px;
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+        .seat-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 18px rgba(72, 33, 18, 0.08);
+        }
+        .seat-btn.empty {
+            background: linear-gradient(180deg, #fffdfa 0%, #f8f0e9 100%);
+        }
+        .seat-btn.has-tier {
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
+        }
+        .seat-btn.has-tier span {
+            color: inherit;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
+        }
+        .seat-btn.has-tier .seat-label {
+            opacity: 0.92;
+        }
+        .seat-placeholder {
+            width: 100%;
+            max-width: 42px;
+            min-width: 36px;
+            height: 44px;
+        }
+        .seat-btn span {
+            display: block;
+            line-height: 1.15;
+        }
+        .seat-label {
+            font-size: 0.52rem;
+            opacity: 0.72;
+            font-weight: 600;
+        }
+        .form-control,
+        .form-select,
+        .input-group-text {
+            border-color: var(--line) !important;
+            background-color: rgba(255, 252, 248, 0.96) !important;
+            color: var(--ink) !important;
+            border-radius: 12px !important;
+            box-shadow: none !important;
+        }
+        .form-control:focus,
+        .form-select:focus {
+            border-color: rgba(180, 35, 24, 0.45) !important;
+            box-shadow: 0 0 0 0.22rem rgba(180, 35, 24, 0.12) !important;
+        }
+        .btn-outline-secondary {
+            border-color: var(--line-strong);
+            color: #5f5148;
+            background: rgba(255, 252, 248, 0.92);
+            border-radius: 12px;
+        }
+        .btn-outline-secondary:hover {
+            background: rgba(248, 238, 229, 0.98);
+            border-color: rgba(180, 35, 24, 0.26);
+            color: var(--accent-strong);
+        }
+        .btn-danger {
+            background: linear-gradient(135deg, #cd3a2f 0%, #951f16 100%);
+            border-color: rgba(113, 23, 15, 0.42);
+            border-radius: 12px;
+        }
+        .alert-danger {
+            border-radius: 16px;
+            background: linear-gradient(180deg, rgba(255, 238, 231, 0.98) 0%, rgba(253, 228, 219, 0.95) 100%) !important;
+            color: #8f1d14 !important;
+        }
+        @media (max-width: 992px) {
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+            .results-grid {
+                grid-template-columns: 1fr;
+            }
+            .tier-panel {
+                height: auto;
+            }
+            .tier-scroll {
+                overflow-y: visible;
+            }
+            .scenario-grid {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+            .top-bar-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            .bus-layout {
+                flex-direction: column;
+            }
+            .bus-front {
+                width: 100%;
+                min-width: 100%;
+                flex-direction: row;
+                align-items: center;
+            }
+            .front-divider {
+                width: 1px;
+                height: 40px;
+                margin: 0 8px;
+            }
+        }
+        @media (max-width: 576px) {
+            .scenario-grid {
+                grid-template-columns: 1fr;
+            }
+            .top-bar-grid {
+                grid-template-columns: 1fr;
+            }
+            .seat-btn {
+                max-width: 34px;
+                min-width: 30px;
+                min-height: 38px;
+                font-size: 0.62rem;
+                padding: 2px 1px;
+            }
+            .bus-columns {
+                gap: 6px;
+            }
+            .seat-column {
+                gap: 6px;
+            }
+            .seat-column .seat-placeholder:nth-child(3),
+            .seat-column .seat-btn:nth-child(3) {
+                margin-top: 14px;
+            }
+            .seat-placeholder {
+                max-width: 34px;
+                min-width: 30px;
+                height: 38px;
+            }
+            .seat-label {
+                font-size: 0.48rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -132,6 +566,87 @@
 
     <script type="text/babel">
         const { useState, useEffect, useRef } = React;
+
+        const TIER_COLORS = ["#0ea5e9", "#f97316", "#8b5cf6", "#22c55e", "#ec4899", "#f59e0b", "#14b8a6", "#6366f1"];
+
+        const buildTier = (index, basePrice = 5000) => {
+            const multiplier = 1 + (index * 0.08);
+            return {
+                id: `tier-${index + 1}`,
+                name: `Tramo ${index + 1}`,
+                targetSeats: 5,
+                price: Math.round(basePrice * multiplier / 100) * 100,
+                color: TIER_COLORS[index % TIER_COLORS.length]
+            };
+        };
+
+        const createDefaultTiers = () => ([]);
+
+        const normalizeSeatPlan = (capacity, currentPlan = []) => {
+            const nextPlan = Array.from({ length: capacity }, (_, index) => currentPlan[index] || null);
+            return nextPlan;
+        };
+
+        const getNextTierColor = (tiers) => {
+            const usedColors = new Set(tiers.map((tier) => tier.color));
+            const availableColor = TIER_COLORS.find((color) => !usedColors.has(color));
+            return availableColor || TIER_COLORS[tiers.length % TIER_COLORS.length];
+        };
+
+        const getContrastTextColor = (hexColor) => {
+            if (!hexColor || typeof hexColor !== "string") {
+                return "#231815";
+            }
+
+            const normalized = hexColor.replace("#", "");
+            const fullHex = normalized.length === 3
+                ? normalized.split("").map((char) => char + char).join("")
+                : normalized;
+
+            if (fullHex.length !== 6) {
+                return "#231815";
+            }
+
+            const r = parseInt(fullHex.slice(0, 2), 16);
+            const g = parseInt(fullHex.slice(2, 4), 16);
+            const b = parseInt(fullHex.slice(4, 6), 16);
+            const luminance = (0.299 * r) + (0.587 * g) + (0.114 * b);
+
+            return luminance > 160 ? "#231815" : "#fffdf8";
+        };
+
+        const buildSeatColumns = (capacity) => {
+            const columns = [];
+            let seatNumber = 1;
+
+            while (seatNumber <= capacity) {
+                const topLeft = seatNumber <= capacity ? seatNumber++ : null;
+                const topRight = seatNumber <= capacity ? seatNumber++ : null;
+                const bottomLeft = seatNumber <= capacity ? seatNumber++ : null;
+                const bottomRight = seatNumber <= capacity ? seatNumber++ : null;
+                columns.push([topLeft, topRight, bottomLeft, bottomRight]);
+            }
+
+            return columns;
+        };
+
+        const applyTiersToSeatPlan = (capacity, tiersToApply) => {
+            const nextPlan = normalizeSeatPlan(capacity, []);
+            let seatIndex = 0;
+
+            tiersToApply.forEach((tier) => {
+                let assigned = 0;
+                while (seatIndex < nextPlan.length && assigned < tier.targetSeats) {
+                    if (nextPlan[seatIndex] === null) {
+                        nextPlan[seatIndex] = tier.id;
+                        assigned += 1;
+                    }
+                    seatIndex += 1;
+                }
+            });
+
+            return nextPlan;
+        };
 
         function App() {
             const [state, setState] = useState({
@@ -148,38 +663,44 @@
                 fecha_max_dataset: null,
                 rutas_disponibles: 0
             });
-            
+
             const [loading, setLoading] = useState(false);
             const [uploadProgress, setUploadProgress] = useState(null);
             const [activeTab, setActiveTab] = useState("dashboard");
-            
+
             const [rutas, setRutas] = useState([]);
             const [horas, setHoras] = useState([]);
-            
+
             const [selectedRuta, setSelectedRuta] = useState("");
             const [selectedTemporada, setSelectedTemporada] = useState("media");
             const [selectedTipoDia, setSelectedTipoDia] = useState("semana");
             const [selectedHora, setSelectedHora] = useState("");
-            
-            const getMappedFecha = (temp, tipo) => {
-                if (temp === "verano") {
-                    return tipo === "semana" ? "2023-01-18" : "2023-01-21";
-                } else if (temp === "invierno") {
-                    return tipo === "semana" ? "2023-07-19" : "2023-07-22";
-                } else {
-                    return tipo === "semana" ? "2023-10-18" : "2023-10-21";
-                }
-            };
-            
-            const selectedFecha = getMappedFecha(selectedTemporada, selectedTipoDia);
-            
-            const [tarifa, setTarifa] = useState(0);
-            const [cupos, setCupos] = useState(0);
-            
+
             const [escenarioBase, setEscenarioBase] = useState(null);
             const [projection, setProjection] = useState(null);
             const [errorMsg, setErrorMsg] = useState("");
 
+            const [pricingTiers, setPricingTiers] = useState(createDefaultTiers());
+            const [seatPlan, setSeatPlan] = useState(() => normalizeSeatPlan(45, []));
+            const [simulating, setSimulating] = useState(false);
+            const [baseFare, setBaseFare] = useState(5000);
+            const [nextTierNumber, setNextTierNumber] = useState(1);
+            const [tierPanelMaxHeight, setTierPanelMaxHeight] = useState(null);
+            const rightStackRef = useRef(null);
+
+            const getMappedFecha = (temp, tipo) => {
+                if (temp === "verano") {
+                    return tipo === "semana" ? "2023-01-18" : "2023-01-21";
+                }
+                if (temp === "invierno") {
+                    return tipo === "semana" ? "2023-07-19" : "2023-07-22";
+                }
+                return tipo === "semana" ? "2023-10-18" : "2023-10-21";
+            };
+
+            const selectedFecha = getMappedFecha(selectedTemporada, selectedTipoDia);
+            const capacity = state.capacidad_bus || 45;
+            const seatColumns = buildSeatColumns(capacity);
             const fetchState = async () => {
                 try {
                     const res = await fetch("/api/sistema/estado");
@@ -211,9 +732,28 @@
             }, []);
 
             useEffect(() => {
+                setSeatPlan((currentPlan) => normalizeSeatPlan(capacity, currentPlan));
+            }, [capacity]);
+
+            useEffect(() => {
+                const syncTierPanelHeight = () => {
+                    if (!rightStackRef.current || window.innerWidth < 992) {
+                        setTierPanelMaxHeight(null);
+                        return;
+                    }
+                    setTierPanelMaxHeight(rightStackRef.current.offsetHeight);
+                };
+
+                syncTierPanelHeight();
+                window.addEventListener("resize", syncTierPanelHeight);
+
+                return () => window.removeEventListener("resize", syncTierPanelHeight);
+            }, [pricingTiers.length, projection, state.capacidad_bus, selectedRuta, selectedHora, selectedFecha]);
+
+            useEffect(() => {
                 if (!selectedRuta) return;
                 const dateStr = selectedFecha || "2023-10-15";
-                
+
                 const fetchHours = async () => {
                     try {
                         const res = await fetch(`/api/rutas/${selectedRuta}/horas?fecha=${dateStr}`);
@@ -228,64 +768,36 @@
                         console.error("Error al obtener horas:", err);
                     }
                 };
+
                 fetchHours();
             }, [selectedRuta, selectedFecha]);
 
             useEffect(() => {
                 if (!selectedRuta || !selectedHora) return;
                 const dateStr = selectedFecha || "2023-10-15";
-                
+
                 const loadBase = async () => {
                     try {
                         const res = await fetch(`/api/escenario/base?ruta=${selectedRuta}&fecha=${dateStr}&hora=${selectedHora}`);
                         const data = await res.json();
                         setEscenarioBase(data);
-                        setTarifa(data.tarifa_base);
-                        setCupos(data.cupos_proteccion_sugeridos);
+                        setBaseFare(data.tarifa_base || 5000);
+                        setPricingTiers(createDefaultTiers());
+                        setSeatPlan(normalizeSeatPlan(capacity, []));
+                        setNextTierNumber(1);
+                        setProjection(null);
+                        setErrorMsg("");
                     } catch (err) {
                         console.error("Error al cargar escenario base:", err);
                     }
                 };
-                loadBase();
-            }, [selectedRuta, selectedFecha, selectedHora]);
 
-            useEffect(() => {
-                if (!selectedRuta || !selectedHora || tarifa === 0) return;
-                const dateStr = selectedFecha || "2023-10-15";
-                
-                const getProjection = async () => {
-                    try {
-                        const res = await fetch("/api/simulacion/proyectar", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({
-                                ruta: selectedRuta,
-                                fecha: dateStr,
-                                hora: selectedHora,
-                                tarifa: parseFloat(tarifa),
-                                cupos_proteccion: parseInt(cupos)
-                            })
-                        });
-                        if (!res.ok) {
-                            const err = await res.json();
-                            setErrorMsg(err.detail || "Error en proyección");
-                            return;
-                        }
-                        const data = await res.json();
-                        setProjection(data);
-                        setErrorMsg("");
-                    } catch (err) {
-                        console.error("Error en simulación:", err);
-                    }
-                };
-                
-                const timer = setTimeout(getProjection, 50);
-                return () => clearTimeout(timer);
-            }, [selectedRuta, selectedFecha, selectedHora, tarifa, cupos]);
+                loadBase();
+            }, [selectedRuta, selectedFecha, selectedHora, capacity]);
 
             useEffect(() => {
                 if (!projection) return;
-                
+
                 const traceBase = {
                     x: ["Ingreso Proyectado ($)"],
                     y: [projection.escenario_base.ingreso_proyectado],
@@ -294,41 +806,57 @@
                     marker: { color: "#94a3b8" },
                     text: ["$" + projection.escenario_base.ingreso_proyectado.toLocaleString("es-CL")],
                     textposition: "outside",
+                    cliponaxis: false,
                     textfont: { color: "#1e293b", size: 13, family: "Outfit, sans-serif" }
                 };
 
                 const traceActual = {
                     x: ["Ingreso Proyectado ($)"],
                     y: [projection.escenario_actual.ingreso_proyectado],
-                    name: "Escenario Optimizado RM",
+                    name: "Escenario Simulado",
                     type: "bar",
                     marker: { color: "#dc2626" },
                     text: ["$" + projection.escenario_actual.ingreso_proyectado.toLocaleString("es-CL")],
                     textposition: "outside",
+                    cliponaxis: false,
                     textfont: { color: "#1e293b", size: 13, family: "Outfit, sans-serif" }
                 };
 
                 const layoutComparison = {
                     title: {
-                        text: "Comparativa de Ingresos: Base vs Optimizado RM",
-                        font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                        text: "Comparativa de Ingresos: Base vs Simulado",
+                        font: { size: 15, weight: "bold", family: "Outfit, sans-serif" },
+                        y: 0.97
                     },
                     barmode: "group",
+                    bargap: 0.55,
+                    bargroupgap: 0.22,
                     paper_bgcolor: "rgba(0,0,0,0)",
                     plot_bgcolor: "rgba(0,0,0,0)",
                     font: { color: "#1e293b", family: "Outfit, sans-serif" },
-                    margin: { t: 40, b: 40, l: 60, r: 20 },
-                    height: 250,
-                    yaxis: { gridcolor: "#e2e8f0", title: "$ CLP" },
+                    margin: { t: 92, b: 36, l: 56, r: 16 },
+                    height: 310,
+                    yaxis: {
+                        gridcolor: "#e2e8f0",
+                        title: "$ CLP",
+                        automargin: true
+                    },
                     showlegend: true,
-                    legend: { orientation: "h", y: 1.15 }
+                    legend: {
+                        orientation: "h",
+                        y: 1.24,
+                        x: 0,
+                        yanchor: "bottom",
+                        xanchor: "left",
+                        font: { size: 11 }
+                    }
                 };
 
                 Plotly.newPlot("comparison-chart", [traceBase, traceActual], layoutComparison, { responsive: true, displayModeBar: false });
-                
+
                 const lineBase = {
-                    x: projection.booking_curve.historica.map(h => h.dias_anticipacion),
-                    y: projection.booking_curve.historica.map(h => h.asientos_acumulados),
+                    x: projection.booking_curve.historica.map((h) => h.dias_anticipacion),
+                    y: projection.booking_curve.historica.map((h) => h.asientos_acumulados),
                     name: "Histórico Promedio",
                     type: "scatter",
                     mode: "lines",
@@ -336,10 +864,10 @@
                     fill: "tozeroy",
                     fillcolor: "rgba(148, 163, 184, 0.06)"
                 };
-                
+
                 const lineActual = {
-                    x: projection.booking_curve.proyectada.map(p => p.dias_anticipacion),
-                    y: projection.booking_curve.proyectada.map(p => p.asientos_acumulados),
+                    x: projection.booking_curve.proyectada.map((p) => p.dias_anticipacion),
+                    y: projection.booking_curve.proyectada.map((p) => p.asientos_acumulados),
                     name: "Proyección Escenario",
                     type: "scatter",
                     mode: "lines",
@@ -347,7 +875,7 @@
                     fill: "tozeroy",
                     fillcolor: "rgba(220, 38, 38, 0.06)"
                 };
-                
+
                 const capacityLine = {
                     x: [-30, 0],
                     y: [state.capacidad_bus, state.capacidad_bus],
@@ -356,27 +884,27 @@
                     mode: "lines",
                     line: { color: "#0f172a", width: 2, dash: "dot" }
                 };
-                
+
                 const layoutCurve = {
                     title: {
                         text: "Booking Curve (Ritmo de Venta)",
-                        font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                        font: { size: 15, weight: "bold", family: "Outfit, sans-serif" }
                     },
                     paper_bgcolor: "rgba(0,0,0,0)",
                     plot_bgcolor: "rgba(0,0,0,0)",
                     font: { color: "#1e293b", family: "Outfit, sans-serif" },
-                    margin: { t: 40, b: 40, l: 40, r: 20 },
-                    height: 250,
+                    margin: { t: 44, b: 42, l: 46, r: 16 },
+                    height: 290,
                     xaxis: { title: "Días de Anticipación", gridcolor: "#e2e8f0" },
                     yaxis: { title: "Asientos Vendidos", gridcolor: "#e2e8f0" }
                 };
-                
+
                 Plotly.newPlot("curve-chart", [lineBase, lineActual, capacityLine], layoutCurve, { responsive: true, displayModeBar: false });
-                
-                const variables = projection.tornado.map(t => t.variable);
-                const upImpacts = projection.tornado.map(t => t.impacto_subida_10);
-                const downImpacts = projection.tornado.map(t => t.impacto_bajada_10);
-                
+
+                const variables = projection.tornado.map((t) => t.variable);
+                const upImpacts = projection.tornado.map((t) => t.impacto_subida_10);
+                const downImpacts = projection.tornado.map((t) => t.impacto_bajada_10);
+
                 const traceTornadoUp = {
                     y: variables,
                     x: upImpacts,
@@ -385,7 +913,7 @@
                     orientation: "h",
                     marker: { color: "#16a34a" }
                 };
-                
+
                 const traceTornadoDown = {
                     y: variables,
                     x: downImpacts,
@@ -394,74 +922,89 @@
                     orientation: "h",
                     marker: { color: "#dc2626" }
                 };
-                
+
                 const layoutTornado = {
                     title: {
-                        text: "Análisis de Sensibilidad de Ingresos (Tornado)",
-                        font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                        text: "Análisis de Sensibilidad de Ingresos",
+                        font: { size: 15, weight: "bold", family: "Outfit, sans-serif" }
                     },
                     barmode: "relative",
                     paper_bgcolor: "rgba(0,0,0,0)",
                     plot_bgcolor: "rgba(0,0,0,0)",
                     font: { color: "#1e293b", family: "Outfit, sans-serif" },
-                    margin: { t: 40, b: 40, l: 120, r: 20 },
-                    height: 200,
+                    margin: { t: 44, b: 36, l: 132, r: 16 },
+                    height: 240,
                     xaxis: { title: "Variación del Ingreso (CLP)", gridcolor: "#e2e8f0" }
                 };
-                
+
                 Plotly.newPlot("tornado-chart", [traceTornadoUp, traceTornadoDown], layoutTornado, { responsive: true, displayModeBar: false });
-                
+
                 if (projection.sensibilidad_cruzada) {
+                    const crossSensitivityTitle = projection.composicion_bus
+                        ? "Sensibilidad Precio vs Asientos Base"
+                        : "Sensibilidad Precio vs Cupos Protegidos";
+
+                    const crossSensitivityXAxis = projection.composicion_bus
+                        ? "Asientos Base"
+                        : "Cupos Protegidos";
+
                     const tracesCruzada = projection.sensibilidad_cruzada.map((item, idx) => {
-                        const classmateColors = ["#4db6ac", "#e28743", "#5c6bc0", "#ec4899"];
-                        const color = classmateColors[idx % classmateColors.length];
+                        const colors = ["#4db6ac", "#e28743", "#5c6bc0", "#ec4899"];
+                        const color = colors[idx % colors.length];
                         return {
-                            x: item.puntos.map(p => p.cupos),
-                            y: item.puntos.map(p => p.ingreso),
+                            x: item.puntos.map((p) => p.cupos),
+                            y: item.puntos.map((p) => p.ingreso),
                             name: item.etiqueta,
-                            type: 'scatter',
-                            mode: 'lines+markers',
-                            line: { color: color, width: 2 },
-                            marker: { color: color, size: 6 }
+                            type: "scatter",
+                            mode: "lines+markers",
+                            line: { color, width: 2 },
+                            marker: { color, size: 6 }
                         };
                     });
-                    
+
                     const layoutCruzada = {
                         title: {
-                            text: "Sensibilidad PRECIO vs CUPOS PROTEGIDOS",
-                            font: { size: 15, weight: 'bold', family: "Outfit, sans-serif" }
+                            text: crossSensitivityTitle,
+                            font: { size: 15, weight: "bold", family: "Outfit, sans-serif" },
+                            y: 0.97
                         },
                         paper_bgcolor: "rgba(0,0,0,0)",
                         plot_bgcolor: "rgba(0,0,0,0)",
                         font: { color: "#1e293b", family: "Outfit, sans-serif" },
-                        xaxis: { 
-                            title: "Cupos Protegidos (última hora)", 
-                            gridcolor: "#e2e8f0", 
-                            tickvals: [5, 10, 15, 20] 
+                        xaxis: {
+                            title: crossSensitivityXAxis,
+                            gridcolor: "#e2e8f0",
+                            tickvals: [...new Set(projection.sensibilidad_cruzada.flatMap((item) => item.puntos.map((p) => p.cupos)))]
                         },
-                        yaxis: { 
-                            title: "Ingreso Total (CLP)", 
-                            gridcolor: "#e2e8f0" 
+                        yaxis: {
+                            title: "Ingreso Total (CLP)",
+                            gridcolor: "#e2e8f0"
                         },
-                        margin: { t: 40, b: 40, l: 80, r: 20 },
-                        height: 200,
-                        legend: { orientation: 'h', y: -0.3, font: { size: 10 } }
+                        margin: { t: 88, b: 60, l: 72, r: 16 },
+                        height: 270,
+                        legend: {
+                            orientation: "h",
+                            y: 1.2,
+                            x: 0,
+                            yanchor: "bottom",
+                            xanchor: "left",
+                            font: { size: 10 }
+                        }
                     };
-                    
+
                     Plotly.newPlot("sensibilidad-cruzada-chart", tracesCruzada, layoutCruzada, { responsive: true, displayModeBar: false });
                 }
-                
-            }, [projection]);
+            }, [projection, state.capacidad_bus]);
 
             const handleFileUpload = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-                
+
                 setLoading(true);
                 setUploadProgress("Cargando CSV y entrenando modelo...");
                 const formData = new FormData();
                 formData.append("archivo", file);
-                
+
                 try {
                     const res = await fetch("/api/sistema/cargar-csv", {
                         method: "POST",
@@ -477,7 +1020,7 @@
                     await fetchState();
                     setLoading(false);
                     setUploadProgress(null);
-                    alert("¡Modelo entrenado exitosamente con los datos del CSV!");
+                    alert("Modelo entrenado exitosamente con los datos del CSV.");
                 } catch (err) {
                     console.error(err);
                     alert("Error al cargar y procesar.");
@@ -488,9 +1031,9 @@
 
             const handleConfigSubmit = async (e) => {
                 e.preventDefault();
-                const cap = parseInt(e.target.capacidad.value);
+                const cap = parseInt(e.target.capacidad.value, 10);
                 const name = e.target.empresa.value;
-                
+
                 try {
                     const res = await fetch("/api/sistema/configuracion", {
                         method: "PUT",
@@ -506,23 +1049,150 @@
                 }
             };
 
-            const handleReset = () => {
-                if (escenarioBase) {
-                    setTarifa(escenarioBase.tarifa_base);
-                    setCupos(escenarioBase.cupos_proteccion_sugeridos);
+            const updateTierField = (tierId, field, value) => {
+                setPricingTiers((currentTiers) => {
+                    const nextTiers = currentTiers.map((tier) => (
+                        tier.id === tierId
+                            ? { ...tier, [field]: Math.max(0, parseInt(value || 0, 10) || 0) }
+                            : tier
+                    ));
+                    return nextTiers;
+                });
+                setProjection(null);
+                setErrorMsg("");
+            };
+
+            const updateTierName = (tierId, value) => {
+                setPricingTiers((currentTiers) => currentTiers.map((tier) => (
+                    tier.id === tierId
+                        ? { ...tier, name: value }
+                        : tier
+                )));
+                setProjection(null);
+                setErrorMsg("");
+            };
+
+            const clearBusPlan = () => {
+                setSeatPlan(normalizeSeatPlan(capacity, []));
+                setProjection(null);
+                setErrorMsg("");
+            };
+
+            const reapplyTierAssignments = (tiersToApply) => {
+                const nextPlan = applyTiersToSeatPlan(capacity, tiersToApply);
+                setSeatPlan(nextPlan);
+                setProjection(null);
+                setErrorMsg("");
+            };
+
+            const syncTierAssignments = (nextTiers) => {
+                setPricingTiers(nextTiers);
+                reapplyTierAssignments(nextTiers);
+            };
+
+            const addTier = () => {
+                const nextTier = buildTier(nextTierNumber - 1, baseFare || 5000);
+                nextTier.id = `tier-${nextTierNumber}`;
+                nextTier.name = `Tramo ${nextTierNumber}`;
+                nextTier.color = getNextTierColor(pricingTiers);
+                const nextTiers = [...pricingTiers, nextTier];
+                syncTierAssignments(nextTiers);
+                setNextTierNumber((current) => current + 1);
+            };
+
+            const removeTier = (tierId) => {
+                if (pricingTiers.length === 1) {
+                    return;
+                }
+                const nextTiers = pricingTiers.filter((tier) => tier.id !== tierId);
+                syncTierAssignments(nextTiers);
+            };
+
+            const updateTierAndRedistribute = (tierId, field, value) => {
+                const nextTiers = pricingTiers.map((tier) => (
+                    tier.id === tierId
+                        ? { ...tier, [field]: Math.max(0, parseInt(value || 0, 10) || 0) }
+                        : tier
+                ));
+                syncTierAssignments(nextTiers);
+            };
+
+            const pricedSeats = seatPlan.filter((seat) => pricingTiers.some((tier) => tier.id === seat)).length;
+            const freeSeats = capacity - pricedSeats;
+
+            const tierMetrics = pricingTiers.map((tier) => {
+                const assignedSeats = seatPlan.filter((seat) => seat === tier.id).length;
+                const subtotal = assignedSeats * tier.price;
+                return { ...tier, assignedSeats, subtotal };
+            });
+
+            const weightedRevenue = tierMetrics.reduce((sum, tier) => sum + tier.subtotal, 0) + (freeSeats * baseFare);
+            const averagePrice = capacity > 0 ? Math.round(weightedRevenue / capacity) : 0;
+            const simulationFare = averagePrice || baseFare;
+
+            const handleSimulateScenario = async () => {
+                if (!selectedRuta || !selectedHora || !escenarioBase) {
+                    setErrorMsg("Seleccione una ruta y una salida antes de simular.");
+                    return;
+                }
+
+                if (pricedSeats === 0 && !baseFare) {
+                    setErrorMsg("Defina una tarifa base o agregue al menos un tramo antes de simular.");
+                    return;
+                }
+
+                setSimulating(true);
+                setErrorMsg("");
+
+                try {
+                    const res = await fetch("/api/simulacion/proyectar-v2", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            ruta: selectedRuta,
+                            fecha: selectedFecha,
+                            hora: selectedHora,
+                            tarifa_base: baseFare,
+                            capacidad_bus: capacity,
+                            tramos: pricingTiers,
+                            seatPlan
+                        })
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.json();
+                        setErrorMsg(err.detail || "Error en simulación");
+                        setSimulating(false);
+                        return;
+                    }
+
+                    const data = await res.json();
+                    setProjection(data);
+                } catch (err) {
+                    console.error("Error en simulación:", err);
+                    setErrorMsg("No fue posible ejecutar la simulación.");
+                } finally {
+                    setSimulating(false);
                 }
             };
 
-            const formatCLP = (val) => {
-                return new Intl.NumberFormat("es-CL", { style: "currency", currency: "CLP", maximumFractionDigits: 0 }).format(val);
-            };
+            const formatCLP = (val) => (
+                new Intl.NumberFormat("es-CL", {
+                    style: "currency",
+                    currency: "CLP",
+                    maximumFractionDigits: 0
+                }).format(val || 0)
+            );
+
+            const selectedRouteMatch = rutas.find((ruta) => ruta.codigo === selectedRuta);
+            const selectedRouteLabel = (selectedRouteMatch && selectedRouteMatch.etiqueta) || selectedRuta;
 
             return (
                 <div className="container-fluid py-4">
                     <header className="d-flex justify-content-between align-items-center mb-4 glass-card p-3">
                         <div className="d-flex align-items-center">
                             <span className="fs-3 me-2">🚌</span>
-                            <h1 className="h4 m-0 header-brand">{state.nombre_empresa} — Revenue Sandbox</h1>
+                            <h1 className="h4 m-0 header-brand">{state.nombre_empresa} - Revenue Sandbox</h1>
                         </div>
                         <div className="d-flex gap-2">
                             <button className={`btn btn-sm ${activeTab === "dashboard" ? "btn-danger text-white" : "btn-outline-secondary"}`} onClick={() => setActiveTab("dashboard")}>
@@ -541,7 +1211,7 @@
                                     <span className="fs-1 text-accent d-block mb-3">📊</span>
                                     <h3 className="mb-3 text-dark fw-bold">JAC Revenue Sandbox</h3>
                                     <p className="text-secondary mb-4">
-                                        Bienvenido al Simulador de Escenarios Comerciales. Para comenzar, debe cargar el archivo de datos históricos de ventas y entrenar el motor predictivo.
+                                        Bienvenido al simulador. Para comenzar, cargue el archivo de datos históricos de ventas y entrene el motor predictivo.
                                     </p>
                                     <label className="drag-drop-area w-100 d-block">
                                         <i className="bi bi-cloud-arrow-up fs-2 text-accent"></i>
@@ -626,178 +1296,349 @@
                                     </div>
                                 </div>
                             ) : (
-                                <div className="row g-4">
-                                    <div className="col-lg-4">
-                                        <div className="glass-card p-4 mb-4">
-                                            <h4 className="mb-3 text-accent fw-bold"><i className="bi bi-sliders"></i> Definir Escenario</h4>
-                                            
-                                            <div className="mb-3">
-                                                <label className="form-label text-secondary small">Seleccionar Ruta</label>
-                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedRuta} onChange={e => setSelectedRuta(e.target.value)}>
-                                                    {rutas.map(r => (
-                                                        <option key={r.codigo} value={r.codigo}>{r.etiqueta}</option>
+                                <div>
+                                    <div className="glass-card section-card section-sim p-4 mb-4">
+                                        <h4 className="mb-3 section-title"><i className="bi bi-diagram-3"></i> Salida a Simular</h4>
+                                        <div className="top-bar-grid">
+                                            <div>
+                                                <label className="form-label text-secondary small">Ruta</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedRuta} onChange={(e) => setSelectedRuta(e.target.value)}>
+                                                    {rutas.map((ruta) => (
+                                                        <option key={ruta.codigo} value={ruta.codigo}>{ruta.etiqueta}</option>
                                                     ))}
                                                 </select>
                                             </div>
-
-                                            <div className="mb-3">
-                                                <label className="form-label text-secondary small">Temporada</label>
-                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedTemporada} onChange={e => setSelectedTemporada(e.target.value)}>
-                                                    <option value="media">Temporada Media (Octubre/Normal)</option>
-                                                    <option value="verano">Verano / Temporada Alta (Enero)</option>
-                                                    <option value="invierno">Vacaciones de Invierno (Julio)</option>
-                                                </select>
-                                            </div>
-
-                                            <div className="mb-3">
-                                                <label className="form-label text-secondary small">Tipo de Día</label>
-                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedTipoDia} onChange={e => setSelectedTipoDia(e.target.value)}>
-                                                    <option value="semana">Días de Semana (Lunes a Jueves)</option>
-                                                    <option value="finde">Fin de Semana (Viernes a Domingo)</option>
-                                                </select>
-                                            </div>
-
-                                            <div className="mb-3">
+                                            <div>
                                                 <label className="form-label text-secondary small">Hora del Servicio</label>
-                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedHora} onChange={e => setSelectedHora(e.target.value)}>
-                                                    {horas.map(h => (
-                                                        <option key={h} value={h}>{h}</option>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedHora} onChange={(e) => setSelectedHora(e.target.value)}>
+                                                    {horas.map((hora) => (
+                                                        <option key={hora} value={hora}>{hora}</option>
                                                     ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="form-label text-secondary small">Temporada</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedTemporada} onChange={(e) => setSelectedTemporada(e.target.value)}>
+                                                    <option value="media">Temporada Media</option>
+                                                    <option value="verano">Verano</option>
+                                                    <option value="invierno">Invierno</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="form-label text-secondary small">Tipo de Día</label>
+                                                <select className="form-select bg-white text-dark border-secondary-subtle" value={selectedTipoDia} onChange={(e) => setSelectedTipoDia(e.target.value)}>
+                                                    <option value="semana">Semana</option>
+                                                    <option value="finde">Fin de semana</option>
                                                 </select>
                                             </div>
                                         </div>
+                                    </div>
 
-                                        <div className="glass-card p-4">
-                                            <h4 className="mb-4 text-accent fw-bold"><i className="bi bi-sliders"></i> Controles del Sandbox</h4>
-                                            
-                                            {escenarioBase ? (
-                                                <div>
-                                                    <div className="mb-4">
-                                                        <div className="d-flex justify-content-between mb-2">
-                                                            <label className="form-label text-secondary small m-0 fw-semibold">Tarifa Aplicada</label>
-                                                            <span className="fw-bold text-dark">{formatCLP(tarifa)}</span>
+                                    <div className="dashboard-grid">
+                                        <div className="dashboard-sidebar">
+                                            <div className="glass-card section-card section-tiers p-4 tier-panel" style={tierPanelMaxHeight ? { maxHeight: `${tierPanelMaxHeight}px` } : undefined}>
+                                                <div className="d-flex justify-content-between align-items-start mb-3">
+                                                    <div>
+                                                        <h4 className="mb-2 section-title"><i className="bi bi-currency-exchange"></i> Tramos Comerciales</h4>
+                                                        <p className="section-subtle small mb-0">{selectedRouteLabel || "Seleccione una ruta"} · {selectedHora || "--:--"}</p>
+                                                    </div>
+                                                    <div className="d-flex gap-2">
+                                                        <button className="btn btn-outline-secondary btn-sm" onClick={() => {
+                                                            setPricingTiers([]);
+                                                            setSeatPlan(normalizeSeatPlan(capacity, []));
+                                                            setNextTierNumber(1);
+                                                            setProjection(null);
+                                                            setErrorMsg("");
+                                                        }}>
+                                                            <i className="bi bi-arrow-repeat"></i>
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="tier-panel-body">
+                                                    <div className="tier-card">
+                                                        <div className="d-flex justify-content-between align-items-center mb-3">
+                                                            <div className="d-flex align-items-center gap-2">
+                                                                <span className="tier-swatch" style={{ backgroundColor: "#94a3b8" }}></span>
+                                                                <strong>Tarifa base</strong>
+                                                            </div>
+                                                            <span className="small text-secondary">Referencia manual</span>
                                                         </div>
-                                                        <input type="range" className="custom-slider" min={Math.round(escenarioBase.tarifa_base * 0.5)} max={Math.round(escenarioBase.tarifa_base * 2.0)} step="100" value={tarifa} onChange={e => setTarifa(e.target.value)} />
-                                                        <div className="d-flex justify-content-between text-muted small mt-1">
-                                                            <span>50%: {formatCLP(escenarioBase.tarifa_base * 0.5)}</span>
-                                                            <span className="text-accent fw-medium">Base: {formatCLP(escenarioBase.tarifa_base)}</span>
-                                                            <span>200%: {formatCLP(escenarioBase.tarifa_base * 2)}</span>
-                                                        </div>
+                                                        <label className="form-label text-secondary small">Precio base CLP</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="100"
+                                                            className="form-control bg-white text-dark border-secondary-subtle"
+                                                            value={baseFare}
+                                                            onChange={(e) => {
+                                                                setBaseFare(Math.max(0, parseInt(e.target.value || 0, 10) || 0));
+                                                                setProjection(null);
+                                                                setErrorMsg("");
+                                                            }}
+                                                        />
                                                     </div>
 
-                                                    <div className="mb-4">
-                                                        <div className="d-flex justify-content-between mb-2">
-                                                            <label className="form-label text-secondary small m-0 fw-semibold">Cupos de Protección</label>
-                                                            <span className="fw-bold text-dark">{cupos} asientos ({Math.round(cupos / state.capacidad_bus * 100)}%)</span>
-                                                        </div>
-                                                        <input type="range" className="custom-slider" min="0" max={state.capacidad_bus} step="1" value={cupos} onChange={e => setCupos(e.target.value)} />
-                                                        <div className="d-flex justify-content-between text-muted small mt-1">
-                                                            <span>0 cupos</span>
-                                                            <span className="text-accent fw-medium">Base: {escenarioBase.cupos_proteccion_sugeridos}</span>
-                                                            <span>Max: {state.capacidad_bus}</span>
-                                                        </div>
+                                                    <div className="tier-scroll">
+                                                        {pricingTiers.length === 0 && (
+                                                            <div className="tier-card text-center text-secondary">
+                                                                <div className="small">Todavia no hay tramos definidos.</div>
+                                                                <div className="small">Añade un tramo para asignar bloques de 5 asientos.</div>
+                                                            </div>
+                                                        )}
+                                                        {tierMetrics.map((tier) => (
+                                                            <div key={tier.id} className="tier-card">
+                                                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                                                    <div className="d-flex align-items-center gap-2">
+                                                                        <span className="tier-swatch" style={{ backgroundColor: tier.color }}></span>
+                                                                        <input
+                                                                            type="text"
+                                                                            className="form-control form-control-sm bg-white text-dark border-secondary-subtle"
+                                                                            value={tier.name}
+                                                                            onChange={(e) => updateTierName(tier.id, e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="d-flex align-items-center gap-2">
+                                                                        <button className="btn btn-outline-secondary btn-sm" onClick={() => removeTier(tier.id)} disabled={pricingTiers.length === 1}>
+                                                                            <i className="bi bi-trash3"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="row g-3">
+                                                                    <div className="col-6">
+                                                                        <label className="form-label text-secondary small">Asientos</label>
+                                                                        <input
+                                                                            type="number"
+                                                                            min="0"
+                                                                            max={capacity}
+                                                                            step="5"
+                                                                            className="form-control bg-white text-dark border-secondary-subtle"
+                                                                            value={tier.targetSeats}
+                                                                            onChange={(e) => updateTierAndRedistribute(tier.id, "targetSeats", e.target.value)}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="col-6">
+                                                                        <label className="form-label text-secondary small">Precio CLP</label>
+                                                                        <div className="input-group">
+                                                                            <span className="input-group-text bg-white text-dark border-secondary-subtle">$</span>
+                                                                            <input
+                                                                                type="number"
+                                                                                min="0"
+                                                                                step="100"
+                                                                                className="form-control bg-white text-dark border-secondary-subtle"
+                                                                                value={tier.price}
+                                                                                onChange={(e) => updateTierField(tier.id, "price", e.target.value)}
+                                                                            />
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div className="d-flex justify-content-between align-items-center mt-3 small">
+                                                                    <span className="text-secondary">Asignados: <strong className="text-dark">{tier.assignedSeats}</strong></span>
+                                                                    <span className="text-secondary">Subtotal: <strong className="text-dark">{formatCLP(tier.subtotal)}</strong></span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
                                                     </div>
 
-                                                    <button className="btn btn-outline-danger btn-sm w-100 fw-semibold" onClick={handleReset}>
-                                                        <i className="bi bi-arrow-counterclockwise"></i> Restablecer escenario base
+                                                    <button className="btn btn-gradient w-100" onClick={addTier}>
+                                                        <i className="bi bi-plus-lg"></i> Añadir tramo
                                                     </button>
                                                 </div>
-                                            ) : (
-                                                <p className="text-center text-muted py-3">Seleccione un escenario completo arriba</p>
+                                            </div>
+
+                                        </div>
+
+                                        <div className="dashboard-main-stack" ref={rightStackRef}>
+                                            <div className="glass-card section-card section-bus p-4 mb-4">
+                                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                                    <div>
+                                                        <h4 className="mb-2 section-title"><i className="bi bi-bus-front"></i> Mapa del Bus</h4>
+                                                        <p className="section-subtle small mb-0">{selectedRouteLabel || "Sin ruta"} · {selectedFecha} · {selectedHora || "--:--"}</p>
+                                                    </div>
+                                                    <div className="d-flex align-items-center gap-3 small text-secondary">
+                                                        {pricingTiers.map((tier) => (
+                                                            <span key={tier.id} className="d-inline-flex align-items-center gap-2">
+                                                                <span className="tier-swatch" style={{ backgroundColor: tier.color }}></span>{tier.name}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                <div className="bus-shell">
+                                                    <div className="bus-layout">
+                                                        <div className="bus-front">
+                                                            <div className="text-center small text-secondary">
+                                                                Frente
+                                                            </div>
+                                                            <div className="front-divider"></div>
+                                                            <div className="driver-zone">
+                                                                <div className="text-center">
+                                                                    <i className="bi bi-steering-wheel fs-5 d-block"></i>
+                                                                </div>
+                                                            </div>
+                                                            <div className="front-divider"></div>
+                                                            <div className="text-center">
+                                                                <div className="text-secondary small">Base</div>
+                                                                <div className="fw-semibold small">{formatCLP(baseFare)}</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div className="bus-main">
+                                                            <div className="bus-columns">
+                                                                {seatColumns.map((column, columnIndex) => (
+                                                                    <div key={`column-${columnIndex}`} className="seat-column">
+                                                                        {column.map((seatNumber, seatPosition) => {
+                                                                            if (seatNumber === null) {
+                                                                                return <div key={`empty-${columnIndex}-${seatPosition}`} className="seat-placeholder"></div>;
+                                                                            }
+
+                                                                            const seatState = seatPlan[seatNumber - 1];
+                                                                            const tier = pricingTiers.find((item) => item.id === seatState);
+                                                                            const style = tier ? {
+                                                                                background: tier.color,
+                                                                                backgroundImage: "none",
+                                                                                borderColor: tier.color,
+                                                                                color: getContrastTextColor(tier.color)
+                                                                            } : {};
+                                                                            const className = `seat-btn ${tier ? "has-tier" : "empty"}`;
+
+                                                                            return (
+                                                                                <button
+                                                                                    key={seatNumber}
+                                                                                    className={className}
+                                                                                    style={style}
+                                                                                    disabled
+                                                                                >
+                                                                                    <span>{seatNumber}</span>
+                                                                                    <span className="seat-label">
+                                                                                        {tier ? tier.name.replace("Tramo ", "T") : "Base"}
+                                                                                    </span>
+                                                                                </button>
+                                                                            );
+                                                                        })}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="glass-card section-card section-scenario p-4 mb-4">
+                                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                                    <h4 className="mb-0 section-title"><i className="bi bi-calculator"></i> Escenario Actual</h4>
+                                                </div>
+
+                                                <div className="scenario-grid mb-3">
+                                                    <div className="metric-tile metric-hot">
+                                                        <div className="text-secondary small">Asientos tarifados</div>
+                                                        <div className="fw-bold fs-4">{pricedSeats}</div>
+                                                    </div>
+                                                    <div className="metric-tile metric-calm">
+                                                        <div className="text-secondary small">Tarifa promedio</div>
+                                                        <div className="fw-bold fs-5">{formatCLP(simulationFare)}</div>
+                                                    </div>
+                                                    <div className="metric-tile metric-sand">
+                                                        <div className="text-secondary small">Asientos base</div>
+                                                        <div className="fw-bold fs-4">{freeSeats}</div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="d-flex flex-wrap gap-2">
+                                                    <button className="btn btn-gradient w-100 py-2 fs-5 mt-2" onClick={handleSimulateScenario} disabled={simulating}>
+                                                        {simulating ? (
+                                                            <span><span className="spinner-border spinner-border-sm me-2"></span>Simulando</span>
+                                                        ) : (
+                                                            <span><i className="bi bi-play-fill"></i> Simular escenario</span>
+                                                        )}
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            {errorMsg && (
+                                                <div className="alert alert-danger border-danger bg-danger-subtle text-danger mb-4">
+                                                    <i className="bi bi-exclamation-triangle-fill me-2"></i> {errorMsg}
+                                                </div>
                                             )}
                                         </div>
                                     </div>
 
-                                    <div className="col-lg-8">
-                                        {errorMsg && (
-                                            <div className="alert alert-danger border-danger bg-danger-subtle text-danger mb-4">
-                                                <i className="bi bi-exclamation-triangle-fill me-2"></i> {errorMsg}
-                                            </div>
-                                        )}
-
-                                        {projection ? (
-                                            <div>
-                                                <div className="row g-4 mb-4">
-                                                    <div className="col-md-6">
-                                                        <div className="glass-card p-4 d-flex justify-content-between align-items-center">
-                                                            <div>
-                                                                <span className="text-secondary small d-block mb-1">Ingreso Total Proyectado</span>
-                                                                <h2 className="fw-bold m-0 text-dark">{formatCLP(projection.escenario_actual.ingreso_proyectado)}</h2>
-                                                                <div className="mt-2">
-                                                                    <span className={`variation-badge ${projection.escenario_actual.variacion_ingreso_porcentaje >= 0 ? "badge-up" : "badge-down"}`}>
-                                                                        {projection.escenario_actual.variacion_ingreso_porcentaje >= 0 ? "▲ +" : "▼ "}
-                                                                        {projection.escenario_actual.variacion_ingreso_porcentaje}%
-                                                                    </span>
-                                                                    <span className="text-muted small ms-2">vs. Base</span>
-                                                                </div>
-                                                            </div>
-                                                            <span className="fs-1 text-accent">💰</span>
-                                                        </div>
-                                                    </div>
-
-                                                    <div className="col-md-6">
-                                                        <div className="glass-card p-4 d-flex justify-content-between align-items-center">
-                                                            <div>
-                                                                <span className="text-secondary small d-block mb-1">Ocupación Proyectada</span>
-                                                                <h2 className="fw-bold m-0 text-dark">{projection.escenario_actual.ocupacion_porcentaje.toFixed(1)}%</h2>
-                                                                <div className="mt-2">
-                                                                    <span className={`variation-badge ${projection.escenario_actual.variacion_ocupacion_puntos >= 0 ? "badge-up" : "badge-down"}`}>
-                                                                        {projection.escenario_actual.variacion_ocupacion_puntos >= 0 ? "▲ +" : "▼ "}
-                                                                        {projection.escenario_actual.variacion_ocupacion_puntos} pp
-                                                                    </span>
-                                                                    <span className="text-muted small ms-2">vs. Base</span>
-                                                                </div>
-                                                            </div>
-                                                            
-                                                            <div className="progress-donut">
-                                                                <svg width="80" height="80">
-                                                                    <circle className="bg-circle" cx="40" cy="40" r="32" />
-                                                                    <circle 
-                                                                        className="val-circle" 
-                                                                        cx="40" cy="40" r="32" 
-                                                                        stroke={projection.escenario_actual.ocupacion_porcentaje >= 80 ? "#16a34a" : (projection.escenario_actual.ocupacion_porcentaje >= 50 ? "#d97706" : "#dc2626")}
-                                                                        strokeDasharray="201"
-                                                                        strokeDashoffset={201 - (201 * projection.escenario_actual.ocupacion_porcentaje / 100)}
-                                                                    />
-                                                                </svg>
+                                    {projection ? (
+                                        <div>
+                                            <div className="row g-4 mb-4">
+                                                <div className="col-md-6">
+                                                    <div className="glass-card p-4 d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <span className="text-secondary small d-block mb-1">Ingreso Total Proyectado</span>
+                                                            <h2 className="fw-bold m-0 text-dark">{formatCLP(projection.escenario_actual.ingreso_proyectado)}</h2>
+                                                            <div className="mt-2">
+                                                                <span className={`variation-badge ${projection.escenario_actual.variacion_ingreso_porcentaje >= 0 ? "badge-up" : "badge-down"}`}>
+                                                                    {projection.escenario_actual.variacion_ingreso_porcentaje >= 0 ? "▲ +" : "▼ "}
+                                                                    {projection.escenario_actual.variacion_ingreso_porcentaje}%
+                                                                </span>
+                                                                <span className="text-muted small ms-2">vs. Base</span>
                                                             </div>
                                                         </div>
+                                                        <span className="fs-1 text-accent">💰</span>
                                                     </div>
                                                 </div>
 
-                                                <div className="row g-4 mb-4">
-                                                    <div className="col-md-12">
-                                                        <div className="glass-card p-4">
-                                                            <div id="comparison-chart"></div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-md-12">
-                                                        <div className="glass-card p-4">
-                                                            <div id="curve-chart"></div>
-                                                            <div className="text-center text-muted small mt-2">
-                                                                <i className="bi bi-info-circle"></i> Las proyecciones son estimaciones estadísticas y no garantizan resultados operativos exactos.
+                                                <div className="col-md-6">
+                                                    <div className="glass-card p-4 d-flex justify-content-between align-items-center">
+                                                        <div>
+                                                            <span className="text-secondary small d-block mb-1">Ocupación Proyectada</span>
+                                                            <h2 className="fw-bold m-0 text-dark">{projection.escenario_actual.ocupacion_porcentaje.toFixed(1)}%</h2>
+                                                            <div className="mt-2">
+                                                                <span className={`variation-badge ${projection.escenario_actual.variacion_ocupacion_puntos >= 0 ? "badge-up" : "badge-down"}`}>
+                                                                    {projection.escenario_actual.variacion_ocupacion_puntos >= 0 ? "▲ +" : "▼ "}
+                                                                    {projection.escenario_actual.variacion_ocupacion_puntos} pp
+                                                                </span>
+                                                                <span className="text-muted small ms-2">vs. Base</span>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    <div className="col-md-6">
-                                                        <div className="glass-card p-4">
-                                                            <div id="tornado-chart"></div>
-                                                        </div>
-                                                    </div>
-                                                    <div className="col-md-6">
-                                                        <div className="glass-card p-4">
-                                                            <div id="sensibilidad-cruzada-chart"></div>
+
+                                                        <div className="progress-donut">
+                                                            <svg width="80" height="80">
+                                                                <circle className="bg-circle" cx="40" cy="40" r="32" />
+                                                                <circle
+                                                                    className="val-circle"
+                                                                    cx="40"
+                                                                    cy="40"
+                                                                    r="32"
+                                                                    stroke={projection.escenario_actual.ocupacion_porcentaje >= 80 ? "#16a34a" : (projection.escenario_actual.ocupacion_porcentaje >= 50 ? "#d97706" : "#dc2626")}
+                                                                    strokeDasharray="201"
+                                                                    strokeDashoffset={201 - (201 * projection.escenario_actual.ocupacion_porcentaje / 100)}
+                                                                />
+                                                            </svg>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        ) : (
-                                            <div className="glass-card p-5 text-center text-secondary">
-                                                <div className="spinner-border text-danger mb-3"></div>
-                                                <p>Calculando proyecciones y simulando el escenario comercial...</p>
+
+                                            <div className="results-grid mb-4">
+                                                <div className="glass-card section-card section-results p-4 chart-card">
+                                                    <div id="comparison-chart" className="chart-plot chart-plot-lg"></div>
+                                                </div>
+                                                <div className="glass-card section-card section-results p-4 chart-card">
+                                                    <div id="curve-chart" className="chart-plot chart-plot-lg"></div>
+                                                    <div className="chart-note">
+                                                        <i className="bi bi-info-circle"></i> Las proyecciones son estimaciones estadísticas y no garantizan resultados operativos exactos.
+                                                    </div>
+                                                </div>
+                                                <div className="glass-card section-card section-results p-4 chart-card">
+                                                    <div id="tornado-chart" className="chart-plot chart-plot-md"></div>
+                                                </div>
+                                                <div className="glass-card section-card section-results p-4 chart-card">
+                                                    <div id="sensibilidad-cruzada-chart" className="chart-plot chart-plot-md"></div>
+                                                </div>
                                             </div>
-                                        )}
-                                    </div>
+                                        </div>
+                                    ) : (
+                                        <div className="glass-card p-5 text-center text-secondary">
+                                            <i className="bi bi-bar-chart-line fs-1 text-accent d-block mb-3"></i>
+                                            <p className="mb-0">Ajusta los tramos, revisa la ocupación automática y ejecuta la simulación para ver el escenario.</p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -806,7 +1647,7 @@
             );
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById("root"));
         root.render(<App />);
     </script>
 </body>
