@@ -1176,6 +1176,51 @@
                 }
             };
 
+            const handleSimularManual = async () => {
+                if (!selectedRuta || !selectedHora || !escenarioBase) {
+                    setErrorMsg("Seleccione una ruta y una salida antes de simular.");
+                    return;
+                }
+                if (pricingTiers.length === 0) {
+                    setErrorMsg("Agrega al menos un tramo en el panel izquierdo antes de simular.");
+                    return;
+                }
+
+                setSimulating(true);
+                setErrorMsg("");
+
+                try {
+                    const res = await fetch("/api/simulacion/proyectar-v2", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            ruta: selectedRuta,
+                            fecha: selectedFecha,
+                            hora: selectedHora,
+                            tarifa_base: baseFare,
+                            capacidad_bus: capacity,
+                            tramos: pricingTiers,
+                            seatPlan: seatPlan
+                        })
+                    });
+
+                    if (!res.ok) {
+                        const err = await res.json();
+                        setErrorMsg(err.detail || "Error al simular tramos manuales");
+                        setSimulating(false);
+                        return;
+                    }
+
+                    const data = await res.json();
+                    setProjection(data);
+                } catch (err) {
+                    console.error("Error en simulación manual:", err);
+                    setErrorMsg("No fue posible simular los tramos definidos.");
+                } finally {
+                    setSimulating(false);
+                }
+            };
+
             const formatCLP = (val) => (
                 new Intl.NumberFormat("es-CL", {
                     style: "currency",
@@ -1556,8 +1601,20 @@
                                                     </div>
                                                 )}
 
-                                                <div className="d-flex flex-wrap gap-2">
-                                                    <button className="btn btn-gradient w-100 py-2 fs-5 mt-2" onClick={handleSimulateScenario} disabled={simulating}>
+                                                <div className="d-flex flex-column gap-2">
+                                                    <button
+                                                        className="btn btn-outline-danger w-100 py-2"
+                                                        onClick={handleSimularManual}
+                                                        disabled={simulating || pricingTiers.length === 0}
+                                                        title={pricingTiers.length === 0 ? "Agrega tramos en el panel izquierdo para simularlos" : "Proyectar los tramos que definiste manualmente"}
+                                                    >
+                                                        {simulating ? (
+                                                            <span><span className="spinner-border spinner-border-sm me-2"></span>Simulando...</span>
+                                                        ) : (
+                                                            <span><i className="bi bi-play-circle"></i> Simular tramos</span>
+                                                        )}
+                                                    </button>
+                                                    <button className="btn btn-gradient w-100 py-2 fs-5" onClick={handleSimulateScenario} disabled={simulating}>
                                                         {simulating ? (
                                                             <span><span className="spinner-border spinner-border-sm me-2"></span>Generando recomendación</span>
                                                         ) : (
