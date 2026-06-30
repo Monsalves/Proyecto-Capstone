@@ -12,10 +12,12 @@ from backend.app.main import (
     ConfigUpdate,
     ConfiguracionDB,
     ProyectarV2Request,
+    RecomendacionTramosRequest,
     SessionLocal,
     TramoRequest,
     cargar_csv,
     get_estado,
+    post_recomendar_tramos,
     post_proyectar_v2,
     put_configuracion,
 )
@@ -123,3 +125,35 @@ def test_proyectar_v2_seatplan_invalido():
 
     assert exc_info.value.status_code == 400
     assert "seatPlan" in exc_info.value.detail
+
+
+def test_recomendar_tramos_ok():
+    db = SessionLocal()
+    cfg = db.query(ConfiguracionDB).filter(ConfiguracionDB.id == 1).first()
+    cfg.capacidad_bus = 45
+    db.commit()
+    db.close()
+
+    data = post_recomendar_tramos(RecomendacionTramosRequest(
+        ruta="tmco-pcon",
+        fecha="2023-10-18",
+        hora="09:30",
+        capacidad_bus=45,
+    ))
+
+    assert "recomendacion" in data
+    assert "composicion_bus" in data
+    assert 2 <= len(data["recomendacion"]["tramos_sugeridos"]) <= 4
+    assert data["recomendacion"]["cantidad_tramos_sugeridos"] == len(data["recomendacion"]["tramos_sugeridos"])
+    assert len(data["recomendacion"]["seat_plan_sugerido"]) == 45
+    assert data["recomendacion"]["estrategia"]
+    assert data["escenario_actual"]["ingreso_proyectado"] > 0
+
+    tramo_ids = {tramo["id"] for tramo in data["recomendacion"]["tramos_sugeridos"]}
+    assert all(seat is None or seat in tramo_ids for seat in data["recomendacion"]["seat_plan_sugerido"])
+
+    target_seats = [tramo["targetSeats"] for tramo in data["recomendacion"]["tramos_sugeridos"]]
+    assert sum(target_seats) == 45
+    if len(target_seats) > 1:
+        assert target_seats[0] == 10
+        assert all(seats % 5 == 0 for seats in target_seats[1:])

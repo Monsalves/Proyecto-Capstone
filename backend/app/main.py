@@ -9,8 +9,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import create_engine, Column, Integer, String, Float, Boolean
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import declarative_base, sessionmaker, Session
 import pandas as pd
 import numpy as np
 from sklearn.ensemble import RandomForestRegressor
@@ -24,6 +23,7 @@ MODEL_PATH = os.path.join(DATA_DIR, "model.joblib")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+TIER_COLORS = ["#0ea5e9", "#f97316", "#8b5cf6", "#22c55e", "#ec4899", "#f59e0b", "#14b8a6", "#6366f1"]
 
 class ConfiguracionDB(Base):
     __tablename__ = "configuracion_sistema"
@@ -339,6 +339,13 @@ class ProyectarV2Request(BaseModel):
     tramos: List[TramoRequest] = Field(default_factory=list)
     seatPlan: List[Optional[str]] = Field(default_factory=list)
 
+class RecomendacionTramosRequest(BaseModel):
+    ruta: str
+    fecha: str
+    hora: str
+    capacidad_bus: int = Field(..., ge=1, le=100)
+    tarifa_base: Optional[float] = Field(default=None, gt=0)
+
 def _predict_occupancy(model, route_to_idx, ruta, fecha, hora, capacidad, tarifa_base_modelo, tarifa_efectiva):
     dt = datetime.strptime(fecha, "%Y-%m-%d")
     dia_sem = dt.weekday()
@@ -557,6 +564,316 @@ def _build_bus_metrics(req: ProyectarV2Request):
         "weighted_revenue": weighted_revenue,
         "tarifa_ponderada": tarifa_ponderada,
         "average_tier_price": average_tier_price
+    }
+
+def _round_price(value):
+    return max(100, int(round(float(value) / 100.0) * 100))
+
+def _build_sequential_seat_plan(capacidad, tramos):
+    seat_plan = []
+    for tramo in tramos:
+        seat_plan.extend([tramo.id] * int(tramo.targetSeats))
+    if len(seat_plan) < capacidad:
+        seat_plan.extend([None] * (capacidad - len(seat_plan)))
+    return seat_plan[:capacidad]
+
+def _allowed_block_sequence(capacidad):
+    if capacidad <= 0:
+        return []
+    remaining = capacidad
+    blocks = []
+    first_block = min(10, remaining)
+    blocks.append(first_block)
+    remaining -= first_block
+    while remaining > 0:
+        block = min(5, remaining)
+        blocks.append(block)
+        remaining -= block
+    return blocks
+
+def _select_recommended_blocks(capacidad, tier_count):
+    allowed_blocks = _allowed_block_sequence(capacidad)
+    if not allowed_blocks:
+        return []
+    bounded_count = max(1, min(int(tier_count), len(allowed_blocks)))
+    if len(allowed_blocks) == 1 or bounded_count == 1:
+        return [sum(allowed_blocks)]
+    if bounded_count == len(allowed_blocks):
+        return allowed_blocks
+
+    # Keep the first commercial cutoff fixed at 10 seats when capacity allows it.
+    result = [allowed_blocks[0]]
+    tail_blocks = allowed_blocks[1:]
+    remaining_tiers = bounded_count - 1
+    running_total = 0
+    for idx in range(remaining_tiers):
+        slots_left = remaining_tiers - idx
+        remaining_blocks = len(tail_blocks) - running_total
+        take_count = max(1, round(remaining_blocks / slots_left))
+        end_index = running_total + take_count
+        result.append(sum(tail_blocks[running_total:end_index]))
+        running_total = end_index
+
+    if running_total < len(tail_blocks):
+        result[-1] += sum(tail_blocks[running_total:])
+    return result
+
+def _candidate_profiles_for_demand(base_occ_ratio):
+    if base_occ_ratio < 0.35:
+        return [
+            {
+                "label": "Estimular demanda",
+                "rationale": "La salida muestra demanda débil; conviene simplificar la escalera y abrir descuentos tempranos para acelerar compra.",
+                "tier_count": 2,
+                "price_profiles": [
+                    [0.82, 1.00],
+                    [0.85, 1.05],
+                ],
+            },
+            {
+                "label": "Estimular demanda con escalera extendida",
+                "rationale": "La salida muestra demanda débil; un tramo adicional permite capturar rebote sin cerrar demasiado rápido el precio.",
+                "tier_count": 3,
+                "price_profiles": [
+                    [0.82, 0.94, 1.08],
+                    [0.85, 0.97, 1.12],
+                ],
+            },
+        ]
+    if base_occ_ratio < 0.70:
+        return [
+            {
+                "label": "Balancear volumen y yield",
+                "rationale": "La salida tiene demanda media; tres tramos suelen capturar volumen temprano sin perder demasiado margen al cierre.",
+                "tier_count": 3,
+                "price_profiles": [
+                    [0.90, 1.00, 1.12],
+                    [0.92, 1.03, 1.15],
+                    [0.95, 1.05, 1.18],
+                ],
+            },
+            {
+                "label": "Balancear volumen con cierre corto",
+                "rationale": "La salida tiene demanda media; una escalera más corta puede evitar sobresegmentar inventario cuando el pick-up es estable.",
+                "tier_count": 2,
+                "price_profiles": [
+                    [0.92, 1.08],
+                    [0.95, 1.12],
+                ],
+            },
+            {
+                "label": "Balancear volumen con microtramos",
+                "rationale": "La salida tiene demanda media; un cuarto tramo permite afinar el cierre si el precio soporta más escalones.",
+                "tier_count": 4,
+                "price_profiles": [
+                    [0.90, 0.98, 1.06, 1.16],
+                    [0.92, 1.00, 1.08, 1.18],
+                ],
+            },
+        ]
+    return [
+        {
+            "label": "Proteger yield",
+            "rationale": "La salida tiene demanda fuerte; conviene usar más escalones y reservar el tramo más caro para el cierre.",
+            "tier_count": 4,
+            "price_profiles": [
+                [0.98, 1.06, 1.15, 1.26],
+                [1.00, 1.08, 1.18, 1.30],
+                [1.02, 1.10, 1.20, 1.34],
+            ],
+        },
+        {
+            "label": "Proteger yield con escalera media",
+            "rationale": "La salida tiene demanda fuerte; tres tramos bastan si no conviene fragmentar demasiado el inventario premium.",
+            "tier_count": 3,
+            "price_profiles": [
+                [0.95, 1.08, 1.20],
+                [0.98, 1.10, 1.24],
+            ],
+        },
+    ]
+
+def _build_recommendation_request(ruta, fecha, hora, capacidad, tarifa_base_modelo, model, route_to_idx):
+    ocup_base = _predict_occupancy(
+        model, route_to_idx, ruta, fecha, hora, capacidad, tarifa_base_modelo, tarifa_base_modelo
+    )
+    demand_ratio = (ocup_base / capacidad) if capacidad > 0 else 0.0
+    candidate_profiles = _candidate_profiles_for_demand(demand_ratio)
+    tier_names = ["Apertura", "Impulso", "Consolidacion", "Cierre"]
+    best_option = None
+
+    for profile in candidate_profiles:
+        seat_blocks = _select_recommended_blocks(capacidad, profile["tier_count"])
+        for multipliers in profile["price_profiles"]:
+            tramos = []
+            for idx, (block_size, multiplier) in enumerate(zip(seat_blocks, multipliers), start=1):
+                tramos.append(TramoRequest(
+                    id=f"tier-{idx}",
+                    name=tier_names[idx - 1],
+                    targetSeats=block_size,
+                    price=_round_price(tarifa_base_modelo * multiplier),
+                    color=TIER_COLORS[(idx - 1) % len(TIER_COLORS)],
+                ))
+
+            seat_plan = _build_sequential_seat_plan(capacidad, tramos)
+            recommendation_req = ProyectarV2Request(
+                ruta=ruta,
+                fecha=fecha,
+                hora=hora,
+                tarifa_base=tarifa_base_modelo,
+                capacidad_bus=capacidad,
+                tramos=tramos,
+                seatPlan=seat_plan,
+            )
+            metrics = _build_bus_metrics(recommendation_req)
+            ocupacion = _predict_occupancy(
+                model, route_to_idx, ruta, fecha, hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"]
+            )
+            ingreso = metrics["weighted_revenue"] * (ocupacion / capacidad if capacidad > 0 else 0.0)
+            option = {
+                "request": recommendation_req,
+                "weighted_fare": metrics["tarifa_ponderada"],
+                "ocupacion": ocupacion,
+                "ingreso": ingreso,
+                "tramos": tramos,
+                "seat_plan": seat_plan,
+                "profile": profile,
+            }
+            if best_option is None or option["ingreso"] > best_option["ingreso"]:
+                best_option = option
+
+    return best_option["request"], {
+        "estrategia": best_option["profile"]["label"],
+        "razon": best_option["profile"]["rationale"],
+        "demanda_base_estimada": round(ocup_base, 1),
+        "ocupacion_esperada": round(best_option["ocupacion"], 1),
+        "ingreso_esperado": round(best_option["ingreso"]),
+        "tarifa_promedio_sugerida": round(best_option["weighted_fare"]),
+        "tarifa_referencia": round(tarifa_base_modelo),
+        "cantidad_tramos_sugeridos": len(best_option["tramos"]),
+        "tramos_sugeridos": [tramo.model_dump() for tramo in best_option["tramos"]],
+        "seat_plan_sugerido": best_option["seat_plan"],
+    }
+
+def _build_v2_projection_response(db, model, route_to_idx, req: ProyectarV2Request, capacidad):
+    metrics = _build_bus_metrics(req)
+    base_esc = get_escenario_base(req.ruta, req.fecha, req.hora)
+    tarifa_base_modelo = base_esc["tarifa_base"]
+
+    ocup_actual = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"]
+    )
+    ocup_base = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, tarifa_base_modelo
+    )
+
+    factor_ocupacion = (ocup_actual / capacidad) if capacidad > 0 else 0.0
+    ingreso_actual = metrics["weighted_revenue"] * factor_ocupacion
+    ingreso_base = ocup_base * tarifa_base_modelo
+
+    var_ing = ((ingreso_actual - ingreso_base) / ingreso_base * 100.0) if ingreso_base > 0 else 0.0
+    var_ocup = (ocup_actual / capacidad * 100.0) - (ocup_base / capacidad * 100.0)
+
+    hist_curve, proj_curve = _build_booking_curves(db, req.ruta, capacidad, ocup_actual)
+
+    ocup_t_up = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"] * 1.10
+    )
+    ingreso_t_up = metrics["weighted_revenue"] * 1.10 * (ocup_t_up / capacidad if capacidad > 0 else 0.0)
+    impact_t_up = ingreso_t_up - ingreso_actual
+
+    ocup_t_down = _predict_occupancy(
+        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"] * 0.90
+    )
+    ingreso_t_down = metrics["weighted_revenue"] * 0.90 * (ocup_t_down / capacidad if capacidad > 0 else 0.0)
+    impact_t_down = ingreso_t_down - ingreso_actual
+
+    delta_base = max(1, int(capacidad * 0.10))
+
+    def potential_revenue_for_base_seats(base_seats):
+        bounded_base = max(0, min(capacidad, int(base_seats)))
+        priced_seats = capacidad - bounded_base
+        return (bounded_base * float(req.tarifa_base)) + (priced_seats * float(metrics["average_tier_price"]))
+
+    ingreso_base_up = potential_revenue_for_base_seats(metrics["base_seats"] + delta_base)
+    impact_base_up = ingreso_base_up * factor_ocupacion - ingreso_actual
+
+    ingreso_base_down = potential_revenue_for_base_seats(metrics["base_seats"] - delta_base)
+    impact_base_down = ingreso_base_down * factor_ocupacion - ingreso_actual
+
+    tornado = [
+        {
+            "variable": "Tarifa promedio ponderada",
+            "impacto_subida_10": round(impact_t_up),
+            "impacto_bajada_10": round(impact_t_down)
+        },
+        {
+            "variable": "Asientos base",
+            "impacto_subida_10": round(impact_base_up),
+            "impacto_bajada_10": round(impact_base_down)
+        }
+    ]
+
+    ajustes_precio = [-5, 0, 5, 10]
+    sensibilidad_cruzada = []
+    base_seat_options = sorted(set([
+        max(0, metrics["base_seats"] - 5),
+        metrics["base_seats"],
+        min(capacidad, metrics["base_seats"] + 5),
+        min(capacidad, metrics["base_seats"] + 10)
+    ]))
+
+    for adj in ajustes_precio:
+        tarifa_mix = metrics["tarifa_ponderada"] * (1 + adj / 100)
+        ocup_val = _predict_occupancy(
+            model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, tarifa_mix
+        )
+        puntos = []
+        for base_seats in base_seat_options:
+            ingreso_potencial_mix = potential_revenue_for_base_seats(base_seats)
+            price_scale = (tarifa_mix / metrics["tarifa_ponderada"]) if metrics["tarifa_ponderada"] > 0 else 1.0
+            ingreso_mix = ingreso_potencial_mix * price_scale * (ocup_val / capacidad if capacidad > 0 else 0.0)
+            puntos.append({
+                "cupos": base_seats,
+                "ingreso": round(ingreso_mix)
+            })
+        sensibilidad_cruzada.append({
+            "etiqueta": f"{adj:+}% precio" if adj != 0 else "0% precio",
+            "puntos": puntos
+        })
+
+    return {
+        "escenario_base": {
+            "ingreso_proyectado": round(ingreso_base),
+            "ocupacion_proyectada": round(ocup_base, 1),
+            "ocupacion_porcentaje": round(ocup_base / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
+            "tarifa": round(tarifa_base_modelo),
+            "cupos_proteccion": 0
+        },
+        "escenario_actual": {
+            "ingreso_proyectado": round(ingreso_actual),
+            "ocupacion_proyectada": round(ocup_actual, 1),
+            "ocupacion_porcentaje": round(ocup_actual / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
+            "tarifa": round(metrics["tarifa_ponderada"]),
+            "cupos_proteccion": 0,
+            "variacion_ingreso_porcentaje": round(var_ing, 1),
+            "variacion_ocupacion_puntos": round(var_ocup, 1)
+        },
+        "booking_curve": {
+            "historica": hist_curve,
+            "proyectada": proj_curve
+        },
+        "tornado": tornado,
+        "sensibilidad_cruzada": sensibilidad_cruzada,
+        "composicion_bus": {
+            "capacidad_bus": capacidad,
+            "asientos_base": metrics["base_seats"],
+            "asientos_tarifados": capacidad - metrics["base_seats"],
+            "tarifa_base": round(req.tarifa_base),
+            "tarifa_promedio_ponderada": round(metrics["tarifa_ponderada"]),
+            "ingreso_potencial_total": round(metrics["weighted_revenue"]),
+            "tramos": metrics["tier_metrics"]
+        }
     }
 
 @app.get("/api/sistema/estado")
@@ -855,125 +1172,46 @@ def post_proyectar_v2(req: ProyectarV2Request):
         db.close()
         raise HTTPException(status_code=400, detail=f"Ruta '{req.ruta}' no encontrada en el modelo entrenado.")
 
-    metrics = _build_bus_metrics(req)
-    base_esc = get_escenario_base(req.ruta, req.fecha, req.hora)
-    tarifa_base_modelo = base_esc["tarifa_base"]
+    response = _build_v2_projection_response(db, model, route_to_idx, req, capacidad)
+    db.close()
+    return response
 
-    ocup_actual = _predict_occupancy(
-        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"]
-    )
-    ocup_base = _predict_occupancy(
-        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, tarifa_base_modelo
-    )
+@app.post("/api/recomendacion/tramos")
+def post_recomendar_tramos(req: RecomendacionTramosRequest):
+    if not os.path.exists(MODEL_PATH):
+        raise HTTPException(status_code=400, detail="El modelo no ha sido entrenado. Cargue el CSV en configuración.")
 
-    factor_ocupacion = (ocup_actual / capacidad) if capacidad > 0 else 0.0
-    ingreso_actual = metrics["weighted_revenue"] * factor_ocupacion
-    ingreso_base = ocup_base * tarifa_base_modelo
+    db = SessionLocal()
+    config = db.query(ConfiguracionDB).filter(ConfiguracionDB.id == 1).first()
+    capacidad = config.capacidad_bus
 
-    var_ing = ((ingreso_actual - ingreso_base) / ingreso_base * 100.0) if ingreso_base > 0 else 0.0
-    var_ocup = (ocup_actual / capacidad * 100.0) - (ocup_base / capacidad * 100.0)
-
-    hist_curve, proj_curve = _build_booking_curves(db, req.ruta, capacidad, ocup_actual)
-
-    ocup_t_up = _predict_occupancy(
-        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"] * 1.10
-    )
-    ingreso_t_up = metrics["weighted_revenue"] * 1.10 * (ocup_t_up / capacidad if capacidad > 0 else 0.0)
-    impact_t_up = ingreso_t_up - ingreso_actual
-
-    ocup_t_down = _predict_occupancy(
-        model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, metrics["tarifa_ponderada"] * 0.90
-    )
-    ingreso_t_down = metrics["weighted_revenue"] * 0.90 * (ocup_t_down / capacidad if capacidad > 0 else 0.0)
-    impact_t_down = ingreso_t_down - ingreso_actual
-
-    delta_base = max(1, int(capacidad * 0.10))
-
-    def potential_revenue_for_base_seats(base_seats):
-        bounded_base = max(0, min(capacidad, int(base_seats)))
-        priced_seats = capacidad - bounded_base
-        return (bounded_base * float(req.tarifa_base)) + (priced_seats * float(metrics["average_tier_price"]))
-
-    ingreso_base_up = potential_revenue_for_base_seats(metrics["base_seats"] + delta_base)
-    impact_base_up = ingreso_base_up * factor_ocupacion - ingreso_actual
-
-    ingreso_base_down = potential_revenue_for_base_seats(metrics["base_seats"] - delta_base)
-    impact_base_down = ingreso_base_down * factor_ocupacion - ingreso_actual
-
-    tornado = [
-        {
-            "variable": "Tarifa promedio ponderada",
-            "impacto_subida_10": round(impact_t_up),
-            "impacto_bajada_10": round(impact_t_down)
-        },
-        {
-            "variable": "Asientos base",
-            "impacto_subida_10": round(impact_base_up),
-            "impacto_bajada_10": round(impact_base_down)
-        }
-    ]
-
-    ajustes_precio = [-5, 0, 5, 10]
-    sensibilidad_cruzada = []
-    base_seat_options = sorted(set([
-        max(0, metrics["base_seats"] - 5),
-        metrics["base_seats"],
-        min(capacidad, metrics["base_seats"] + 5),
-        min(capacidad, metrics["base_seats"] + 10)
-    ]))
-
-    for adj in ajustes_precio:
-        tarifa_mix = metrics["tarifa_ponderada"] * (1 + adj / 100)
-        ocup_val = _predict_occupancy(
-            model, route_to_idx, req.ruta, req.fecha, req.hora, capacidad, tarifa_base_modelo, tarifa_mix
+    if req.capacidad_bus != capacidad:
+        db.close()
+        raise HTTPException(
+            status_code=400,
+            detail=f"capacidad_bus enviada ({req.capacidad_bus}) no coincide con la configuración actual ({capacidad})."
         )
-        puntos = []
-        for base_seats in base_seat_options:
-            ingreso_potencial_mix = potential_revenue_for_base_seats(base_seats)
-            price_scale = (tarifa_mix / metrics["tarifa_ponderada"]) if metrics["tarifa_ponderada"] > 0 else 1.0
-            ingreso_mix = ingreso_potencial_mix * price_scale * (ocup_val / capacidad if capacidad > 0 else 0.0)
-            puntos.append({
-                "cupos": base_seats,
-                "ingreso": round(ingreso_mix)
-            })
-        sensibilidad_cruzada.append({
-            "etiqueta": f"{adj:+}% precio" if adj != 0 else "0% precio",
-            "puntos": puntos
-        })
 
-    response = {
-        "escenario_base": {
-            "ingreso_proyectado": round(ingreso_base),
-            "ocupacion_proyectada": round(ocup_base, 1),
-            "ocupacion_porcentaje": round(ocup_base / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
-            "tarifa": round(tarifa_base_modelo),
-            "cupos_proteccion": 0
-        },
-        "escenario_actual": {
-            "ingreso_proyectado": round(ingreso_actual),
-            "ocupacion_proyectada": round(ocup_actual, 1),
-            "ocupacion_porcentaje": round(ocup_actual / capacidad * 100.0, 1) if capacidad > 0 else 0.0,
-            "tarifa": round(metrics["tarifa_ponderada"]),
-            "cupos_proteccion": 0,
-            "variacion_ingreso_porcentaje": round(var_ing, 1),
-            "variacion_ocupacion_puntos": round(var_ocup, 1)
-        },
-        "booking_curve": {
-            "historica": hist_curve,
-            "proyectada": proj_curve
-        },
-        "tornado": tornado,
-        "sensibilidad_cruzada": sensibilidad_cruzada,
-        "composicion_bus": {
-            "capacidad_bus": capacidad,
-            "asientos_base": metrics["base_seats"],
-            "asientos_tarifados": capacidad - metrics["base_seats"],
-            "tarifa_base": round(req.tarifa_base),
-            "tarifa_promedio_ponderada": round(metrics["tarifa_ponderada"]),
-            "ingreso_potencial_total": round(metrics["weighted_revenue"]),
-            "tramos": metrics["tier_metrics"]
-        }
-    }
+    payload = joblib.load(MODEL_PATH)
+    model = payload["model"]
+    route_to_idx = payload["route_to_idx"]
 
+    if req.ruta not in route_to_idx:
+        db.close()
+        raise HTTPException(status_code=400, detail=f"Ruta '{req.ruta}' no encontrada en el modelo entrenado.")
+
+    base_esc = get_escenario_base(req.ruta, req.fecha, req.hora)
+    tarifa_base_modelo = float(req.tarifa_base or base_esc["tarifa_base"])
+    recommendation_req, recommendation_meta = _build_recommendation_request(
+        req.ruta,
+        req.fecha,
+        req.hora,
+        capacidad,
+        tarifa_base_modelo,
+        model,
+        route_to_idx,
+    )
+    response = _build_v2_projection_response(db, model, route_to_idx, recommendation_req, capacidad)
+    response["recomendacion"] = recommendation_meta
     db.close()
     return response

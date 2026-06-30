@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JAC Revenue Sandbox</title>
+    <title>JAC Revenue Optimizer</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -1132,12 +1132,7 @@
 
             const handleSimulateScenario = async () => {
                 if (!selectedRuta || !selectedHora || !escenarioBase) {
-                    setErrorMsg("Seleccione una ruta y una salida antes de simular.");
-                    return;
-                }
-
-                if (pricedSeats === 0 && !baseFare) {
-                    setErrorMsg("Defina una tarifa base o agregue al menos un tramo antes de simular.");
+                    setErrorMsg("Seleccione una ruta y una salida antes de generar una recomendación.");
                     return;
                 }
 
@@ -1145,7 +1140,7 @@
                 setErrorMsg("");
 
                 try {
-                    const res = await fetch("/api/simulacion/proyectar-v2", {
+                    const res = await fetch("/api/recomendacion/tramos", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
@@ -1153,9 +1148,7 @@
                             fecha: selectedFecha,
                             hora: selectedHora,
                             tarifa_base: baseFare,
-                            capacidad_bus: capacity,
-                            tramos: pricingTiers,
-                            seatPlan
+                            capacidad_bus: capacity
                         })
                     });
 
@@ -1167,10 +1160,17 @@
                     }
 
                     const data = await res.json();
+                    const recomendacion = data.recomendacion || null;
+                    const tramosSugeridos = recomendacion ? (recomendacion.tramos_sugeridos || []) : [];
+                    const seatPlanSugerido = recomendacion ? (recomendacion.seat_plan_sugerido || []) : [];
+                    setBaseFare(recomendacion ? (recomendacion.tarifa_referencia || baseFare) : baseFare);
+                    setPricingTiers(tramosSugeridos);
+                    setSeatPlan(normalizeSeatPlan(capacity, seatPlanSugerido));
+                    setNextTierNumber(tramosSugeridos.length + 1);
                     setProjection(data);
                 } catch (err) {
-                    console.error("Error en simulación:", err);
-                    setErrorMsg("No fue posible ejecutar la simulación.");
+                    console.error("Error en recomendación:", err);
+                    setErrorMsg("No fue posible generar la recomendación.");
                 } finally {
                     setSimulating(false);
                 }
@@ -1192,7 +1192,7 @@
                     <header className="d-flex justify-content-between align-items-center mb-4 glass-card p-3">
                         <div className="d-flex align-items-center">
                             <span className="fs-3 me-2">🚌</span>
-                            <h1 className="h4 m-0 header-brand">{state.nombre_empresa} - Revenue Sandbox</h1>
+                            <h1 className="h4 m-0 header-brand">{state.nombre_empresa} - Revenue Optimizer</h1>
                         </div>
                         <div className="d-flex gap-2">
                             <button className={`btn btn-sm ${activeTab === "dashboard" ? "btn-danger text-white" : "btn-outline-secondary"}`} onClick={() => setActiveTab("dashboard")}>
@@ -1209,9 +1209,9 @@
                             <div className="col-md-6">
                                 <div className="glass-card p-5 text-center">
                                     <span className="fs-1 text-accent d-block mb-3">📊</span>
-                                    <h3 className="mb-3 text-dark fw-bold">JAC Revenue Sandbox</h3>
+                                    <h3 className="mb-3 text-dark fw-bold">JAC Revenue Optimizer</h3>
                                     <p className="text-secondary mb-4">
-                                        Bienvenido al simulador. Para comenzar, cargue el archivo de datos históricos de ventas y entrene el motor predictivo.
+                                        Cargue datos históricos de ventas para entrenar el motor predictivo y empezar a recibir recomendaciones automáticas de tramos.
                                     </p>
                                     <label className="drag-drop-area w-100 d-block">
                                         <i className="bi bi-cloud-arrow-up fs-2 text-accent"></i>
@@ -1298,7 +1298,7 @@
                             ) : (
                                 <div>
                                     <div className="glass-card section-card section-sim p-4 mb-4">
-                                        <h4 className="mb-3 section-title"><i className="bi bi-diagram-3"></i> Salida a Simular</h4>
+                                        <h4 className="mb-3 section-title"><i className="bi bi-diagram-3"></i> Salida a Recomendar</h4>
                                         <div className="top-bar-grid">
                                             <div>
                                                 <label className="form-label text-secondary small">Ruta</label>
@@ -1339,7 +1339,7 @@
                                             <div className="glass-card section-card section-tiers p-4 tier-panel" style={tierPanelMaxHeight ? { maxHeight: `${tierPanelMaxHeight}px` } : undefined}>
                                                 <div className="d-flex justify-content-between align-items-start mb-3">
                                                     <div>
-                                                        <h4 className="mb-2 section-title"><i className="bi bi-currency-exchange"></i> Tramos Comerciales</h4>
+                                                        <h4 className="mb-2 section-title"><i className="bi bi-currency-exchange"></i> Tramos Sugeridos</h4>
                                                         <p className="section-subtle small mb-0">{selectedRouteLabel || "Seleccione una ruta"} · {selectedHora || "--:--"}</p>
                                                     </div>
                                                     <div className="d-flex gap-2">
@@ -1360,11 +1360,11 @@
                                                         <div className="d-flex justify-content-between align-items-center mb-3">
                                                             <div className="d-flex align-items-center gap-2">
                                                                 <span className="tier-swatch" style={{ backgroundColor: "#94a3b8" }}></span>
-                                                                <strong>Tarifa base</strong>
-                                                            </div>
-                                                            <span className="small text-secondary">Referencia manual</span>
+                                                            <strong>Tarifa de referencia</strong>
                                                         </div>
-                                                        <label className="form-label text-secondary small">Precio base CLP</label>
+                                                            <span className="small text-secondary">Ancla para la recomendación</span>
+                                                        </div>
+                                                        <label className="form-label text-secondary small">Precio referencia CLP</label>
                                                         <input
                                                             type="number"
                                                             min="0"
@@ -1382,8 +1382,8 @@
                                                     <div className="tier-scroll">
                                                         {pricingTiers.length === 0 && (
                                                             <div className="tier-card text-center text-secondary">
-                                                                <div className="small">Todavia no hay tramos definidos.</div>
-                                                                <div className="small">Añade un tramo para asignar bloques de 5 asientos.</div>
+                                                                <div className="small">Todavia no hay una recomendación cargada.</div>
+                                                                <div className="small">Genera una recomendación para pintar los asientos sugeridos.</div>
                                                             </div>
                                                         )}
                                                         {tierMetrics.map((tier) => (
@@ -1441,7 +1441,7 @@
                                                     </div>
 
                                                     <button className="btn btn-gradient w-100" onClick={addTier}>
-                                                        <i className="bi bi-plus-lg"></i> Añadir tramo
+                                                        <i className="bi bi-plus-lg"></i> Añadir tramo manual
                                                     </button>
                                                 </div>
                                             </div>
@@ -1526,7 +1526,7 @@
 
                                             <div className="glass-card section-card section-scenario p-4 mb-4">
                                                 <div className="d-flex justify-content-between align-items-center mb-3">
-                                                    <h4 className="mb-0 section-title"><i className="bi bi-calculator"></i> Escenario Actual</h4>
+                                                    <h4 className="mb-0 section-title"><i className="bi bi-calculator"></i> Recomendación Actual</h4>
                                                 </div>
 
                                                 <div className="scenario-grid mb-3">
@@ -1544,12 +1544,24 @@
                                                     </div>
                                                 </div>
 
+                                                {projection && projection.recomendacion && (
+                                                    <div className="metric-tile mb-3">
+                                                        <div className="fw-semibold text-dark mb-1">{projection.recomendacion.estrategia}</div>
+                                                        <div className="small text-secondary">{projection.recomendacion.razon}</div>
+                                                        <div className="small text-secondary mt-2">
+                                                            Demanda base estimada: <strong className="text-dark">{projection.recomendacion.demanda_base_estimada}</strong> asientos
+                                                            {" · "}
+                                                            Tarifa sugerida promedio: <strong className="text-dark">{formatCLP(projection.recomendacion.tarifa_promedio_sugerida)}</strong>
+                                                        </div>
+                                                    </div>
+                                                )}
+
                                                 <div className="d-flex flex-wrap gap-2">
                                                     <button className="btn btn-gradient w-100 py-2 fs-5 mt-2" onClick={handleSimulateScenario} disabled={simulating}>
                                                         {simulating ? (
-                                                            <span><span className="spinner-border spinner-border-sm me-2"></span>Simulando</span>
+                                                            <span><span className="spinner-border spinner-border-sm me-2"></span>Generando recomendación</span>
                                                         ) : (
-                                                            <span><i className="bi bi-play-fill"></i> Simular escenario</span>
+                                                            <span><i className="bi bi-stars"></i> Generar recomendación</span>
                                                         )}
                                                     </button>
                                                 </div>
@@ -1636,7 +1648,7 @@
                                     ) : (
                                         <div className="glass-card p-5 text-center text-secondary">
                                             <i className="bi bi-bar-chart-line fs-1 text-accent d-block mb-3"></i>
-                                            <p className="mb-0">Ajusta los tramos, revisa la ocupación automática y ejecuta la simulación para ver el escenario.</p>
+                                            <p className="mb-0">Selecciona una salida y genera una recomendación para ver los tramos sugeridos y el bus pintado automáticamente.</p>
                                         </div>
                                     )}
                                 </div>
